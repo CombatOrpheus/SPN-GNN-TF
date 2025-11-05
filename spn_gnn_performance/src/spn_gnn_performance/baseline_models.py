@@ -1,0 +1,103 @@
+# baseline_models.py - Baseline (non-GNN) models for performance comparison.
+
+import networkx as nx
+import numpy as np
+import tensorflow as tf
+import tensorflow_gnn as tfgnn
+from typing import Dict
+
+def _graph_tensor_to_networkx(graph: tfgnn.GraphTensor) -> nx.DiGraph:
+    """Converts a tfgnn.GraphTensor to a networkx.DiGraph."""
+    g = nx.DiGraph()
+    nodes = range(graph.node_sets["node"].sizes[0])
+    edges = graph.edge_sets["edge"].adjacency.source.numpy(), graph.edge_sets["edge"].adjacency.target.numpy()
+
+    g.add_nodes_from(nodes)
+    g.add_edges_from(zip(*edges))
+    return g
+
+def extract_node_degree(graph: tfgnn.GraphTensor) -> np.ndarray:
+    """Extracts in-degree and out-degree for each node."""
+    g = _graph_tensor_to_networkx(graph)
+    in_degree = np.array([d for _, d in g.in_degree()])
+    out_degree = np.array([d for _, d in g.out_degree()])
+    return np.stack([in_degree, out_degree], axis=1)
+
+def extract_pagerank_centrality(graph: tfgnn.GraphTensor) -> np.ndarray:
+    """Extracts PageRank centrality for each node."""
+    g = _graph_tensor_to_networkx(graph)
+    pagerank = nx.pagerank(g)
+    return np.array([pagerank.get(i, 0.0) for i in range(len(g.nodes))])
+
+def extract_local_clustering_coefficient(graph: tfgnn.GraphTensor) -> np.ndarray:
+    """Extracts local clustering coefficient for each node."""
+    g = _graph_tensor_to_networkx(graph)
+    # Clustering coefficient is for undirected graphs.
+    clustering = nx.clustering(g.to_undirected())
+    return np.array([clustering.get(i, 0.0) for i in range(len(g.nodes))])
+
+def engineer_features(graph: tfgnn.GraphTensor) -> np.ndarray:
+    """
+    Engineers additional features from the graph structure and combines them
+    with the original node features.
+    """
+    original_features = graph.node_sets["node"]["hidden_state"].numpy()
+
+    degree_features = extract_node_degree(graph)
+    pagerank_features = extract_pagerank_centrality(graph)
+    clustering_features = extract_local_clustering_coefficient(graph)
+
+    # Reshape centrality and clustering features to be 2D arrays.
+    pagerank_features = np.expand_dims(pagerank_features, axis=1)
+    clustering_features = np.expand_dims(clustering_features, axis=1)
+
+    return np.hstack([
+        original_features,
+        degree_features,
+        pagerank_features,
+        clustering_features
+    ])
+
+from sklearn.svm import SVR
+from sklearn.base import BaseEstimator, RegressorMixin
+
+class SVMModel(BaseEstimator, RegressorMixin):
+    """A wrapper for the scikit-learn SVR model."""
+    def __init__(self, **kwargs):
+        self.model = SVR(**kwargs)
+
+    def fit(self, X, y):
+        self.model.fit(X, y)
+        return self
+
+    def predict(self, X):
+        return self.model.predict(X)
+
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Input
+
+class MLPModel(BaseEstimator, RegressorMixin):
+    """A Multi-Layer Perceptron model for regression using TensorFlow/Keras."""
+    def __init__(self, input_shape, layers=[64, 32], epochs=10, batch_size=32, verbose=0):
+        self.input_shape = input_shape
+        self.layers = layers
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.verbose = verbose
+        self.model = self._build_model()
+
+    def _build_model(self):
+        model = Sequential()
+        model.add(Input(shape=(self.input_shape,)))
+        for units in self.layers:
+            model.add(Dense(units, activation='relu'))
+        model.add(Dense(1))  # Output layer for regression
+        model.compile(optimizer='adam', loss='mse')
+        return model
+
+    def fit(self, X, y):
+        self.model.fit(X, y, epochs=self.epochs, batch_size=self.batch_size, verbose=self.verbose)
+        return self
+
+    def predict(self, X):
+        return self.model.predict(X).flatten()
