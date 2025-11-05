@@ -1,7 +1,7 @@
 [workspace]
 authors = ["google-labs-jules[bot] <161369871+google-labs-jules[bot]@users.noreply.github.com>"]
 channels = ["conda-forge"]
-name = "app"
+name = "spn-gnn-performance"
 platforms = ["linux-64"]
 version = "0.1.0"
 
