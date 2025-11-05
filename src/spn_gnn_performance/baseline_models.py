@@ -4,7 +4,7 @@ import networkx as nx
 import numpy as np
 import tensorflow as tf
 import tensorflow_gnn as tfgnn
-from typing import Dict
+from typing import Dict, Union, Tuple
 
 def _graph_tensor_to_networkx(graph: tfgnn.GraphTensor) -> nx.DiGraph:
     """Converts a tfgnn.GraphTensor to a networkx.DiGraph."""
@@ -16,6 +16,7 @@ def _graph_tensor_to_networkx(graph: tfgnn.GraphTensor) -> nx.DiGraph:
     g.add_edges_from(zip(*edges))
     return g
 
+
 def extract_node_degree(graph: tfgnn.GraphTensor) -> np.ndarray:
     """Extracts in-degree and out-degree for each node."""
     g = _graph_tensor_to_networkx(graph)
@@ -23,11 +24,13 @@ def extract_node_degree(graph: tfgnn.GraphTensor) -> np.ndarray:
     out_degree = np.array([d for _, d in g.out_degree()])
     return np.stack([in_degree, out_degree], axis=1)
 
+
 def extract_pagerank_centrality(graph: tfgnn.GraphTensor) -> np.ndarray:
     """Extracts PageRank centrality for each node."""
     g = _graph_tensor_to_networkx(graph)
     pagerank = nx.pagerank(g)
     return np.array([pagerank.get(i, 0.0) for i in range(len(g.nodes))])
+
 
 def extract_local_clustering_coefficient(graph: tfgnn.GraphTensor) -> np.ndarray:
     """Extracts local clustering coefficient for each node."""
@@ -35,6 +38,7 @@ def extract_local_clustering_coefficient(graph: tfgnn.GraphTensor) -> np.ndarray
     # Clustering coefficient is for undirected graphs.
     clustering = nx.clustering(g.to_undirected())
     return np.array([clustering.get(i, 0.0) for i in range(len(g.nodes))])
+
 
 def engineer_features(graph: tfgnn.GraphTensor) -> np.ndarray:
     """
@@ -58,23 +62,88 @@ def engineer_features(graph: tfgnn.GraphTensor) -> np.ndarray:
         clustering_features
     ])
 
+def prepare_dataset_for_baseline(dataset: tf.data.Dataset) -> tf.data.Dataset:
+    """
+    Takes a dataset of GraphTensors, engineers features, and pads them
+    in a scalable way for baseline models. Returns a new tf.data.Dataset.
+    """
+    # First pass: find max_nodes without loading everything into memory.
+    max_nodes = 0
+    for graph, _ in dataset:
+        num_nodes = graph.node_sets["node"].sizes[0].numpy()
+        if num_nodes > max_nodes:
+            max_nodes = num_nodes
+
+    # Determine the shape of the engineered features.
+    # 3 (original) + 2 (degree) + 1 (pagerank) + 1 (clustering) = 7
+    engineered_feature_dim = 7
+
+    def _engineer_and_pad(graph, label):
+        engineered_features = engineer_features(graph)
+        label_numpy = label.numpy()
+
+        num_nodes = engineered_features.shape[0]
+        pad_width = max_nodes - num_nodes
+
+        padded_features = np.pad(
+            engineered_features,
+            ((0, pad_width), (0, 0)),
+            'constant',
+            constant_values=-1
+        ).astype(np.float32)
+
+        padded_label = np.pad(
+            label_numpy,
+            ((0, pad_width), (0, 0)),
+            'constant',
+            constant_values=-1
+        ).astype(np.float32)
+
+        return padded_features, padded_label
+
+    def _map_fn(graph, label):
+        features, labels = tf.py_function(
+            _engineer_and_pad,
+            inp=[graph, label],
+            Tout=[tf.float32, tf.float32]
+        )
+        features.set_shape([max_nodes, engineered_feature_dim])
+        labels.set_shape([max_nodes, 1])
+        return features, labels
+
+    return dataset.map(_map_fn)
+
+
 from sklearn.svm import SVR
 from sklearn.base import BaseEstimator, RegressorMixin
 
+
 class SVMModel(BaseEstimator, RegressorMixin):
     """A wrapper for the scikit-learn SVR model."""
+
     def __init__(self, **kwargs):
         self.model = SVR(**kwargs)
 
     def fit(self, X, y):
-        self.model.fit(X, y)
+        # Flatten the features and labels
+        X_flattened = X.reshape(-1, X.shape[-1])
+        y_flattened = y.ravel()
+        # Create a mask for non-padded values
+        mask = ~np.all(X_flattened == -1, axis=1)
+        # Apply the mask
+        X_filtered = X_flattened[mask]
+        y_filtered = y_flattened[mask]
+        self.model.fit(X_filtered, y_filtered)
         return self
 
     def predict(self, X):
-        return self.model.predict(X)
+        X_flattened = X.reshape(-1, X.shape[-1])
+        return self.model.predict(X_flattened)
+
 
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Input
+from tensorflow.keras.layers import Dense, Input, Masking
+
 
 class MLPModel(BaseEstimator, RegressorMixin):
     """A Multi-Layer Perceptron model for regression using TensorFlow/Keras."""
@@ -88,7 +157,9 @@ class MLPModel(BaseEstimator, RegressorMixin):
 
     def _build_model(self):
         model = Sequential()
-        model.add(Input(shape=(self.input_shape,)))
+        model.add(Input(shape=self.input_shape))
+        # Add a masking layer to ignore padded values
+        model.add(Masking(mask_value=-1.))
         for units in self.layers:
             model.add(Dense(units, activation='relu'))
         model.add(Dense(1))  # Output layer for regression
@@ -100,4 +171,4 @@ class MLPModel(BaseEstimator, RegressorMixin):
         return self
 
     def predict(self, X):
-        return self.model.predict(X).flatten()
+        return self.model.predict(X)
