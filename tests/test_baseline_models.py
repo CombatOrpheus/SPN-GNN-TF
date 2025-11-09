@@ -3,14 +3,14 @@
 import unittest
 import numpy as np
 import tensorflow as tf
-from spn_gnn_performance.tf_dataset import create_dataset_from_jsonl
+from spn_gnn_performance.tf_dataset import load_dataset
 from spn_gnn_performance.baseline_models import SVMModel, MLPModel, prepare_dataset_for_baseline
 
 class TestBaselineModels(unittest.TestCase):
 
     def setUp(self):
         self.test_data_path = "tests/test_data.jsonl"
-        self.dataset = create_dataset_from_jsonl(self.test_data_path)
+        self.dataset = load_dataset(self.test_data_path)
         self.padded_dataset = prepare_dataset_for_baseline(self.dataset)
 
         # Convert to numpy for testing properties

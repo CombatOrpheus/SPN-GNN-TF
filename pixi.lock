@@ -361,17 +361,21 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/29/c7/1be559eb10cb7cac0d26373f18656c8037553619ddd4098e50b04ea8b4ab/hdfs-2.7.3.tar.gz
       - pypi: https://files.pythonhosted.org/packages/a8/6c/d2fbdaaa5959339d53ba38e94c123e4e84b8fbc4b84beb0e70d7c1608486/httplib2-0.22.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c0/a3/e610ae0feba3e7374da08ab6cc9bb76c8bfa84b4e502aa357bda0ef6dcae/jsonpickle-3.4.2-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/db/5d/945296512980b0827e93418514c8be9236baa6f0a1e8ca8be3a2026665b0/keras_tuner-1.4.7-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/16/53/aca9f36da2516db008017db85a1f3cafaee0efc5fc7a25d94c909651792f/kt_legacy-1.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/aa/ea/853aa32dfa1006d3eb43384712f35b8f2d6f0a757b8c779d40c29e3e8515/ml_collections-0.1.1.tar.gz
       - pypi: https://files.pythonhosted.org/packages/f3/a7/55f8f3853a4a654d3a6fbf63e646e0b469b52c174703a10db70a1cb06c7e/objsize-0.7.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d1/7a/76b8111154457ee5e95016039f9c5e44c180752f966080607a74f8965c65/orjson-3.11.4-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/32/2d/440e4d7041fff89f28f483733eb617127aa866135c2dc719e05893f089e1/portpicker-1.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/4e/6d/280c4c2ce28b1593a19ad5239c8b826871fc6ec275c21afc8e1820108039/proto_plus-1.26.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/a8/ee/a878f2ad010cbccb311f947f0f2f09d38f613938ee28c34e60fceecc75a1/pyaml-25.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3b/8c/4c3ed19026a00740b81fe1c87f3ff235b2763a0a1ddf5711a9d026b775ce/pyarrow-18.1.0-cp39-cp39-manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/2e/c3/94ade4906a2f88bc935772f59c934013b4205e773bcb4239db114a6da136/pyarrow_hotfix-0.7-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ea/76/75b1bb82e9bad3e3d656556eaa353d8cd17c4254393b08ec9786ac8ed273/pydot-1.4.2-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f9/e5/b7be85a66a720c8886b2d31921dc712ecf4af8a583ddd88febbd1548a0b9/pymongo-4.15.3-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/7f/26/5c5fa0e83c3621db835cfc1f1d789b37e7fa99ed54423b5f519beb931aa7/redis-5.3.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/60/ee/e9c71bdf334edc14ff769463bd6173966b0445e442a28b18f790b84032f5/regex-2025.11.3-cp39-cp39-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/65/cd/15c9ebea645cc9860aa71fe0474f4be981f10ed8e19e1fb0ef1027d4966e/scikit_optimize-0.10.2-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/66/7c/6c7bae8e5a6ecd4d3cc34a2a5929c0599b954cd00877a50772fa42304d78/SQLAlchemy-1.4.54-cp39-cp39-manylinux1_x86_64.manylinux2010_x86_64.manylinux_2_12_x86_64.manylinux_2_5_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/17/6a/97691f9936f65cd3918e2a7abb6a6fe739087bab7c29e64052fe46082f42/tensorflow_gnn-0.5.0-py3-none-any.whl
@@ -2370,6 +2374,34 @@ packages:
   - pkg:pypi/keras-preprocessing?source=hash-mapping
   size: 37899
   timestamp: 1736115443419
+- pypi: https://files.pythonhosted.org/packages/db/5d/945296512980b0827e93418514c8be9236baa6f0a1e8ca8be3a2026665b0/keras_tuner-1.4.7-py3-none-any.whl
+  name: keras-tuner
+  version: 1.4.7
+  sha256: 0bcf0220eccc74e7a6a9bd7c8e58531a1af8515019e6bc2dc495833155c07fe2
+  requires_dist:
+  - keras
+  - packaging
+  - requests
+  - kt-legacy
+  - scikit-learn ; extra == 'bayesian'
+  - scipy ; extra == 'bayesian'
+  - tensorflow-cpu ; extra == 'build'
+  - namex ; extra == 'build'
+  - build ; extra == 'build'
+  - tensorflow>=2.0 ; extra == 'tensorflow'
+  - tensorflow-cpu>=2.0 ; extra == 'tensorflow-cpu'
+  - black ; extra == 'tests'
+  - flake8 ; extra == 'tests'
+  - isort ; extra == 'tests'
+  - ipython ; extra == 'tests'
+  - pandas ; extra == 'tests'
+  - portpicker ; extra == 'tests'
+  - pytest ; extra == 'tests'
+  - pytest-cov ; extra == 'tests'
+  - pytest-xdist ; extra == 'tests'
+  - namex ; extra == 'tests'
+  - scikit-learn ; extra == 'tests'
+  - scipy ; extra == 'tests'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/keyutils-1.6.3-hb9d3cd8_0.conda
   sha256: 0960d06048a7185d3542d850986d807c6e37ca2e644342dd0c72feefcf26c2a4
   md5: b38117a3c920364aff79f870c984b4a3
@@ -2410,6 +2442,10 @@ packages:
   purls: []
   size: 1326164
   timestamp: 1671091702497
+- pypi: https://files.pythonhosted.org/packages/16/53/aca9f36da2516db008017db85a1f3cafaee0efc5fc7a25d94c909651792f/kt_legacy-1.0.5-py3-none-any.whl
+  name: kt-legacy
+  version: 1.0.5
+  sha256: 8d5c5b3dccf348367fe9ca5b006e7ad2d1babcce62976cfc199e831ea699dcd3
 - conda: https://conda.anaconda.org/conda-forge/linux-64/lame-3.100-h166bdaf_1003.tar.bz2
   sha256: aad2a703b9d7b038c0f745b853c6bb5f122988fe1a7a096e0e606d9cbec4eaab
   md5: a8832b479f93521a9e7b5b743803be51
@@ -4055,6 +4091,14 @@ packages:
   - pkg:pypi/pure-eval?source=hash-mapping
   size: 16668
   timestamp: 1733569518868
+- pypi: https://files.pythonhosted.org/packages/a8/ee/a878f2ad010cbccb311f947f0f2f09d38f613938ee28c34e60fceecc75a1/pyaml-25.7.0-py3-none-any.whl
+  name: pyaml
+  version: 25.7.0
+  sha256: ce5d7867cc2b455efdb9b0448324ff7b9f74d99f64650f12ca570102db6b985f
+  requires_dist:
+  - pyyaml
+  - unidecode ; extra == 'anchors'
+  requires_python: '>=3.8'
 - pypi: https://files.pythonhosted.org/packages/3b/8c/4c3ed19026a00740b81fe1c87f3ff235b2763a0a1ddf5711a9d026b775ce/pyarrow-18.1.0-cp39-cp39-manylinux_2_28_x86_64.whl
   name: pyarrow
   version: 18.1.0
@@ -4610,6 +4654,28 @@ packages:
   - pkg:pypi/scikit-learn?source=hash-mapping
   size: 9377172
   timestamp: 1736497252566
+- pypi: https://files.pythonhosted.org/packages/65/cd/15c9ebea645cc9860aa71fe0474f4be981f10ed8e19e1fb0ef1027d4966e/scikit_optimize-0.10.2-py2.py3-none-any.whl
+  name: scikit-optimize
+  version: 0.10.2
+  sha256: 45bc7e879b086133984721f2f6735a86c085073f6c481c2ec665b5c67b44d723
+  requires_dist:
+  - joblib>=0.11
+  - pyaml>=16.9
+  - numpy>=1.20.3
+  - scipy>=1.1.0
+  - scikit-learn>=1.0.0
+  - packaging>=21.3
+  - flake8 ; extra == 'dev'
+  - pandas ; extra == 'dev'
+  - pytest ; extra == 'dev'
+  - pytest-cov ; extra == 'dev'
+  - pytest-xdist ; extra == 'dev'
+  - memory-profiler ; extra == 'doc'
+  - numpydoc ; extra == 'doc'
+  - sphinx ; extra == 'doc'
+  - pydata-sphinx-theme ; extra == 'doc'
+  - sphinx-gallery>=0.6 ; extra == 'doc'
+  - matplotlib>=2.0.0 ; extra == 'plots'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/scipy-1.13.1-py39haf93ffa_0.conda
   sha256: 55becd997688a9a499aa553e9e61eb28038ca068929c23f0a973ab9a01ac9eac
   md5: 492a2cd65862d16a4aaf535ae9ccb761
