@@ -111,15 +111,17 @@ def load_dataset(file_path: str) -> tf.data.Dataset:
         )
     )
 
-def split_dataset(dataset: tf.data.Dataset, train_split=0.8, shuffle=True, seed=42):
-    """Splits a dataset into training and validation sets."""
+def split_dataset(dataset: tf.data.Dataset, train_split=0.8, val_split=0.1, shuffle=True, seed=42):
+    """Splits a dataset into training, validation, and test sets."""
     dataset_size = len(list(dataset.as_numpy_iterator()))
     train_size = int(train_split * dataset_size)
+    val_size = int(val_split * dataset_size)
 
     if shuffle:
         dataset = dataset.shuffle(dataset_size, seed=seed)
 
     train_dataset = dataset.take(train_size)
-    val_dataset = dataset.skip(train_size)
+    val_dataset = dataset.skip(train_size).take(val_size)
+    test_dataset = dataset.skip(train_size).skip(val_size)
 
-    return train_dataset, val_dataset
+    return train_dataset, val_dataset, test_dataset
