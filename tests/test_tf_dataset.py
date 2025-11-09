@@ -4,7 +4,7 @@ import unittest
 import os
 import tensorflow as tf
 import tensorflow_gnn as tfgnn
-from spn_gnn_performance.tf_dataset import create_dataset_from_jsonl
+from spn_gnn_performance.tf_dataset import load_dataset
 
 class TestTFDataset(unittest.TestCase):
 
@@ -12,7 +12,7 @@ class TestTFDataset(unittest.TestCase):
         self.test_data_path = "tests/test_data.jsonl"
 
     def test_dataset_creation_and_structure(self):
-        dataset = create_dataset_from_jsonl(self.test_data_path)
+        dataset = load_dataset(self.test_data_path)
 
         for graph, labels in dataset.take(1):
             self.assertIsInstance(graph, tfgnn.GraphTensor)

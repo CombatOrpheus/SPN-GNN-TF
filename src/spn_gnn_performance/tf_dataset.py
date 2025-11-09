@@ -79,7 +79,7 @@ def _parse_spn_json_and_build_graph(json_string: tf.Tensor) -> Tuple[tf.Tensor, 
 
     return graph, tf.expand_dims(labels, axis=-1)
 
-def create_dataset_from_jsonl(file_path: str) -> tf.data.Dataset:
+def load_dataset(file_path: str) -> tf.data.Dataset:
     """
     Creates a tf.data.Dataset from a JSON-L file of SPN data.
     """
@@ -110,3 +110,16 @@ def create_dataset_from_jsonl(file_path: str) -> tf.data.Dataset:
             tf.TensorSpec(shape=(None, 1), dtype=tf.float32)
         )
     )
+
+def split_dataset(dataset: tf.data.Dataset, train_split=0.8, shuffle=True, seed=42):
+    """Splits a dataset into training and validation sets."""
+    dataset_size = len(list(dataset.as_numpy_iterator()))
+    train_size = int(train_split * dataset_size)
+
+    if shuffle:
+        dataset = dataset.shuffle(dataset_size, seed=seed)
+
+    train_dataset = dataset.take(train_size)
+    val_dataset = dataset.skip(train_size)
+
+    return train_dataset, val_dataset
