@@ -69,7 +69,7 @@ def prepare_dataset_for_baseline(dataset: tf.data.Dataset) -> tf.data.Dataset:
     """
     # First pass: find max_nodes without loading everything into memory.
     max_nodes = 0
-    for graph, _ in dataset:
+    for graph in dataset:
         num_nodes = graph.node_sets["node"].sizes[0].numpy()
         if num_nodes > max_nodes:
             max_nodes = num_nodes
@@ -78,8 +78,9 @@ def prepare_dataset_for_baseline(dataset: tf.data.Dataset) -> tf.data.Dataset:
     # 3 (original) + 2 (degree) + 1 (pagerank) + 1 (clustering) = 7
     engineered_feature_dim = 7
 
-    def _engineer_and_pad(graph, label):
+    def _engineer_and_pad(graph):
         engineered_features = engineer_features(graph)
+        label = graph.node_sets['node']['label']
         label_numpy = label.numpy()
 
         num_nodes = engineered_features.shape[0]
@@ -101,10 +102,10 @@ def prepare_dataset_for_baseline(dataset: tf.data.Dataset) -> tf.data.Dataset:
 
         return padded_features, padded_label
 
-    def _map_fn(graph, label):
+    def _map_fn(graph):
         features, labels = tf.py_function(
             _engineer_and_pad,
-            inp=[graph, label],
+            inp=[graph],
             Tout=[tf.float32, tf.float32]
         )
         features.set_shape([max_nodes, engineered_feature_dim])

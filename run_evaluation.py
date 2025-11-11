@@ -49,36 +49,46 @@ def save_plots(y_true, y_pred, is_place, output_dir):
 def main():
     """Main function to run the evaluation."""
     parser = argparse.ArgumentParser(description="Run evaluation on a pre-trained model.")
-    parser.add_argument("--model-path", type=str, required=True, help="Path to the pre-trained model file.")
+    parser.add_argument("--model-type", type=str, required=True, choices=["gcn", "gat", "mpnn", "svm", "mlp"], help="The model type to evaluate.")
+    parser.add_argument("--hyperparameters-path", type=str, required=True, help="Path to the hyperparameters file.")
     parser.add_argument("--dataset-path", type=str, required=True, help="Path to the evaluation dataset in JSON-L format.")
     parser.add_argument("--output-dir", type=str, required=True, help="Directory to save output files (metrics and plots).")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
-    print("Loading model and data...")
+    print("Loading data...")
 
-    # Load model and infer type
-    model_extension = os.path.splitext(args.model_path)[1]
-    is_baseline_model = False
-    if model_extension == ".keras":
-        custom_objects = {"GCNModel": GCNModel, "GATModel": GATModel, "MPNNModel": MPNNModel}
-        model = tf.keras.models.load_model(args.model_path, custom_objects=custom_objects)
-        if not any(isinstance(layer, tfgnn.keras.layers.GraphUpdate) for layer in model.layers):
-            is_baseline_model = True
-    elif model_extension == ".joblib":
-        model = joblib.load(args.model_path)
-        is_baseline_model = True
-    else:
-        raise ValueError(f"Unsupported model file extension: {model_extension}")
+    # Load hyperparameters
+    with open(args.hyperparameters_path, 'r') as f:
+        hps = json.load(f)
 
     # Load and potentially prepare the dataset
     dataset = load_dataset(args.dataset_path)
+    is_baseline_model = args.model_type in ["svm", "mlp"]
     if is_baseline_model:
         eval_dataset = prepare_dataset_for_baseline(dataset)
     else:
         eval_dataset = dataset.batch(1)
 
-    print("Model and data loaded successfully. Starting evaluation...")
+    print("Data loaded successfully. Building model...")
+
+    # Build model
+    if args.model_type == "gcn":
+        graph_spec = dataset.element_spec
+        features_spec = dict(graph_spec.node_sets_spec['node'].features_spec)
+        del features_spec['label']
+        input_graph_spec = tfgnn.GraphTensorSpec.from_piece_specs(
+            edge_sets_spec=graph_spec.edge_sets_spec,
+            node_sets_spec={'node': tfgnn.NodeSetSpec.from_field_specs(
+                features_spec=features_spec,
+                sizes_spec=graph_spec.node_sets_spec['node'].sizes_spec)}
+        )
+        model = GCNModel(input_graph_spec, units=hps['units'], output_dim=1)
+    # Add other model types here
+    else:
+        raise ValueError(f"Unsupported model type: {args.model_type}")
+
+    print("Model built successfully. Starting evaluation...")
 
     # Get predictions and true labels
     y_true_all, y_pred_all, is_place_all = [], [], []
@@ -92,10 +102,14 @@ def main():
             preds = model.predict(features)
             y_pred_all.extend(preds.ravel()[mask])
     else: # GNN model
-        for graph, label in eval_dataset:
-            y_true_all.extend(label.numpy().flatten())
+        for graph in eval_dataset:
+            labels = graph.node_sets['node']['label']
+            y_true_all.extend(labels.values.numpy().flatten())
+            features = graph.node_sets['node'].get_features_dict()
+            del features['label']
+            graph = graph.replace_features(node_sets={'node': features})
             preds = model.predict_on_batch(graph)
-            y_pred_all.extend(preds.numpy().flatten())
+            y_pred_all.extend(preds.flatten())
             node_features = graph.node_sets["node"]["hidden_state"].numpy()[0]
             is_place_all.extend(node_features[:, 0] == 1)
 
