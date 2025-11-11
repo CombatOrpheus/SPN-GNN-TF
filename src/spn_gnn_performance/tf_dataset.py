@@ -5,10 +5,10 @@ import tensorflow as tf
 import tensorflow_gnn as tfgnn
 from typing import Tuple
 
-def _parse_spn_json_and_build_graph(json_string: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
+def _parse_spn_json_and_build_graph(json_string: tf.Tensor) -> tfgnn.GraphTensor:
     """
-    Parses a JSON-L string, extracts SPN data, and constructs a GraphTensor
-    and the corresponding regression labels.
+    Parses a JSON-L string, extracts SPN data, and constructs a GraphTensor.
+    The regression labels are stored as a 'label' feature in the node set.
     """
     data = json.loads(json_string.numpy().decode("utf-8"))
 
@@ -34,6 +34,11 @@ def _parse_spn_json_and_build_graph(json_string: tf.Tensor) -> Tuple[tf.Tensor, 
 
     node_features = tf.concat([place_features, transition_features], axis=0)
 
+    # Regression labels
+    avg_tokens_per_place = tf.constant(data["spn_allmus"], dtype=tf.float32)
+    avg_firing_rates = tf.constant(data["spn_labda"], dtype=tf.float32)
+    labels = tf.concat([avg_tokens_per_place, avg_firing_rates], axis=0)
+
     # Edges and edge features
     pre_conditions = petri_net[:, :num_transitions]
     post_conditions = petri_net[:, num_transitions:2*num_transitions]
@@ -57,7 +62,10 @@ def _parse_spn_json_and_build_graph(json_string: tf.Tensor) -> Tuple[tf.Tensor, 
         node_sets={
             "node": tfgnn.NodeSet.from_fields(
                 sizes=[num_places + num_transitions],
-                features={"hidden_state": node_features}
+                features={
+                    "hidden_state": node_features,
+                    "label": tf.expand_dims(labels, axis=-1)
+                }
             )
         },
         edge_sets={
@@ -72,12 +80,7 @@ def _parse_spn_json_and_build_graph(json_string: tf.Tensor) -> Tuple[tf.Tensor, 
         }
     )
 
-    # Regression labels
-    avg_tokens_per_place = tf.constant(data["spn_allmus"], dtype=tf.float32)
-    avg_firing_rates = tf.constant(data["spn_labda"], dtype=tf.float32)
-    labels = tf.concat([avg_tokens_per_place, avg_firing_rates], axis=0)
-
-    return graph, tf.expand_dims(labels, axis=-1)
+    return graph
 
 def load_dataset(file_path: str) -> tf.data.Dataset:
     """
@@ -86,7 +89,10 @@ def load_dataset(file_path: str) -> tf.data.Dataset:
     graph_spec = tfgnn.GraphTensorSpec.from_piece_specs(
         node_sets_spec={
             'node': tfgnn.NodeSetSpec.from_field_specs(
-                features_spec={'hidden_state': tf.TensorSpec(shape=(None, 3), dtype=tf.float32)},
+                features_spec={
+                    'hidden_state': tf.TensorSpec(shape=(None, 3), dtype=tf.float32),
+                    'label': tf.TensorSpec(shape=(None, 1), dtype=tf.float32)
+                },
                 sizes_spec=tf.TensorSpec(shape=(1,), dtype=tf.int32))
         },
         edge_sets_spec={
@@ -105,23 +111,24 @@ def load_dataset(file_path: str) -> tf.data.Dataset:
 
     return tf.data.Dataset.from_generator(
         generator,
-        output_signature=(
-            graph_spec,
-            tf.TensorSpec(shape=(None, 1), dtype=tf.float32)
-        )
+        output_signature=graph_spec
     )
 
 def split_dataset(dataset: tf.data.Dataset, train_split=0.8, val_split=0.1, shuffle=True, seed=42):
     """Splits a dataset into training, validation, and test sets."""
-    dataset_size = len(list(dataset.as_numpy_iterator()))
+    dataset_size = dataset.cardinality()
+    if dataset_size == tf.data.experimental.UNKNOWN_CARDINALITY:
+        # Fallback for datasets with unknown cardinality
+        dataset_size = len(list(dataset))
+
     train_size = int(train_split * dataset_size)
     val_size = int(val_split * dataset_size)
 
     if shuffle:
-        dataset = dataset.shuffle(dataset_size, seed=seed)
+        dataset = dataset.shuffle(buffer_size=dataset_size, seed=seed)
 
     train_dataset = dataset.take(train_size)
     val_dataset = dataset.skip(train_size).take(val_size)
-    test_dataset = dataset.skip(train_size).skip(val_size)
+    test_dataset = dataset.skip(train_size + val_size)
 
     return train_dataset, val_dataset, test_dataset

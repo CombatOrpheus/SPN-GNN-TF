@@ -7,6 +7,7 @@ import pandas as pd
 import keras_tuner as kt
 from spn_gnn_performance import tuning, tf_dataset, baseline_models
 import matplotlib.pyplot as plt
+import tensorflow_gnn as tfgnn
 
 def main():
     parser = argparse.ArgumentParser(description="Run hyperparameter tuning for SPN GNN models.")
@@ -20,14 +21,35 @@ def main():
     if args.model in ["gcn", "gat", "mpnn", "mlp"]:
         # Load dataset
         dataset = tf_dataset.load_dataset(args.dataset_path)
-        train_dataset, val_dataset = tf_dataset.split_dataset(dataset)
+        train_dataset, val_dataset, test_dataset = tf_dataset.split_dataset(dataset)
+
+        def extract_labels(graph: tfgnn.GraphTensor):
+            labels = graph.node_sets['node']['label']
+            features = graph.node_sets['node'].get_features_dict()
+            del features['label']
+            graph = graph.replace_features(node_sets={'node': features})
+            return graph, labels.values
+
+        train_dataset_with_labels = train_dataset.batch(32).map(extract_labels)
+        val_dataset_with_labels = val_dataset.batch(32).map(extract_labels)
+
+        # For GNN models, we need the graph_spec to build the model.
+        graph_spec = train_dataset.element_spec
+        features_spec = dict(graph_spec.node_sets_spec['node'].features_spec)
+        del features_spec['label']
+        input_graph_spec = tfgnn.GraphTensorSpec.from_piece_specs(
+            edge_sets_spec=graph_spec.edge_sets_spec,
+            node_sets_spec={'node': tfgnn.NodeSetSpec.from_field_specs(
+                features_spec=features_spec,
+                sizes_spec=graph_spec.node_sets_spec['node'].sizes_spec)}
+        )
 
         if args.model == "gcn":
-            build_fn = tuning.build_gcn_model
+            build_fn = tuning.build_gcn_model(input_graph_spec)
         elif args.model == "gat":
-            build_fn = tuning.build_gat_model
+            build_fn = tuning.build_gat_model(input_graph_spec)
         elif args.model == "mpnn":
-            build_fn = tuning.build_mpnn_model
+            build_fn = tuning.build_mpnn_model(input_graph_spec)
         elif args.model == "mlp":
             train_dataset = baseline_models.prepare_dataset_for_baseline(train_dataset)
             val_dataset = baseline_models.prepare_dataset_for_baseline(val_dataset)
@@ -35,13 +57,13 @@ def main():
 
         tuner = kt.BayesianOptimization(
             build_fn,
-            objective="val_loss",
-            max_trials=20,
+            objective="val_mae",
+            max_trials=1,
             directory="tuning_results",
             project_name=args.model,
         )
 
-        tuner.search(train_dataset.batch(32), epochs=10, validation_data=val_dataset.batch(32))
+        tuner.search(train_dataset_with_labels, epochs=1, validation_data=val_dataset_with_labels, validation_steps=1)
 
         # Save best hyperparameters
         best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]

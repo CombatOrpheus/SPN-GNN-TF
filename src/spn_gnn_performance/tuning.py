@@ -9,48 +9,54 @@ from skopt.space import Real, Categorical, Integer
 from spn_gnn_performance import baseline_models, models
 
 
-def build_gcn_model(hp):
-    """Builds a GCN model for KerasTuner."""
-    units = hp.Int("units", min_value=32, max_value=256, step=32)
-    learning_rate = hp.Float("learning_rate", min_value=1e-4, max_value=1e-2, sampling="log")
+def build_gcn_model(graph_spec):
+    """Returns a function that builds a GCN model for KerasTuner."""
+    def build_fn(hp):
+        units = hp.Int("units", min_value=32, max_value=256, step=32)
+        learning_rate = hp.Float("learning_rate", min_value=1e-4, max_value=1e-2, sampling="log")
 
-    model = models.GCNModel(units=units, output_dim=1)
+        model = models.GCNModel(graph_spec, units=units, output_dim=1)
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    loss = tf.keras.losses.MeanAbsolutePercentageError()
+        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        loss = tf.keras.losses.MeanAbsolutePercentageError()
 
-    model.compile(optimizer=optimizer, loss=loss)
-    return model
-
-
-def build_gat_model(hp):
-    """Builds a GAT model for KerasTuner."""
-    units = hp.Int("units", min_value=32, max_value=256, step=32)
-    num_heads = hp.Int("num_heads", min_value=2, max_value=8, step=2)
-    learning_rate = hp.Float("learning_rate", min_value=1e-4, max_value=1e-2, sampling="log")
-
-    model = models.GATModel(units=units, output_dim=1, num_heads=num_heads)
-
-    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    loss = tf.keras.losses.MeanAbsolutePercentageError()
-
-    model.compile(optimizer=optimizer, loss=loss)
-    return model
+        model.compile(optimizer=optimizer, loss=loss, metrics=['mae'])
+        return model
+    return build_fn
 
 
-def build_mpnn_model(hp):
-    """Builds a MPNN model for KerasTuner."""
-    message_dim = hp.Int("message_dim", min_value=32, max_value=128, step=32)
-    next_state_dim = hp.Int("next_state_dim", min_value=32, max_value=128, step=32)
-    learning_rate = hp.Float("learning_rate", min_value=1e-4, max_value=1e-2, sampling="log")
+def build_gat_model(graph_spec):
+    """Returns a function that builds a GAT model for KerasTuner."""
+    def build_fn(hp):
+        units = hp.Int("units", min_value=32, max_value=256, step=32)
+        num_heads = hp.Int("num_heads", min_value=2, max_value=8, step=2)
+        learning_rate = hp.Float("learning_rate", min_value=1e-4, max_value=1e-2, sampling="log")
 
-    model = models.MPNNModel(output_dim=1, message_dim=message_dim, next_state_dim=next_state_dim)
+        model = models.GATModel(graph_spec, units=units, output_dim=1, num_heads=num_heads)
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    loss = tf.keras.losses.MeanAbsolutePercentageError()
+        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        loss = tf.keras.losses.MeanAbsolutePercentageError()
 
-    model.compile(optimizer=optimizer, loss=loss)
-    return model
+        model.compile(optimizer=optimizer, loss=loss, metrics=['mae'])
+        return model
+    return build_fn
+
+
+def build_mpnn_model(graph_spec):
+    """Returns a function that builds an MPNN model for KerasTuner."""
+    def build_fn(hp):
+        message_dim = hp.Int("message_dim", min_value=32, max_value=128, step=32)
+        next_state_dim = hp.Int("next_state_dim", min_value=32, max_value=128, step=32)
+        learning_rate = hp.Float("learning_rate", min_value=1e-4, max_value=1e-2, sampling="log")
+
+        model = models.MPNNModel(graph_spec, output_dim=1, message_dim=message_dim, next_state_dim=next_state_dim)
+
+        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        loss = tf.keras.losses.MeanAbsolutePercentageError()
+
+        model.compile(optimizer=optimizer, loss=loss, metrics=['mae'])
+        return model
+    return build_fn
 
 
 def tune_svm_model(X, y):

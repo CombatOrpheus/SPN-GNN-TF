@@ -4,31 +4,32 @@ import argparse
 import json
 import os
 import tensorflow as tf
+import tensorflow_gnn as tfgnn
 from spn_gnn_performance import tf_dataset, baseline_models, models
 import numpy as np
 import joblib
 from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error, mean_absolute_error
 
 
-def build_and_compile_gcn(hps):
+def build_and_compile_gcn(graph_spec, hps):
     """Builds and compiles a GCN model from hyperparameters."""
-    model = models.GCNModel(units=hps['units'], output_dim=1)
+    model = models.GCNModel(graph_spec, units=hps['units'], output_dim=1)
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
                   loss=tf.keras.losses.MeanAbsolutePercentageError(),
                   metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
     return model
 
-def build_and_compile_gat(hps):
+def build_and_compile_gat(graph_spec, hps):
     """Builds and compiles a GAT model from hyperparameters."""
-    model = models.GATModel(units=hps['units'], output_dim=1, num_heads=hps['num_heads'])
+    model = models.GATModel(graph_spec, units=hps['units'], output_dim=1, num_heads=hps['num_heads'])
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
                   loss=tf.keras.losses.MeanAbsolutePercentageError(),
                   metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
     return model
 
-def build_and_compile_mpnn(hps):
+def build_and_compile_mpnn(graph_spec, hps):
     """Builds and compiles an MPNN model from hyperparameters."""
-    model = models.MPNNModel(output_dim=1, message_dim=hps['message_dim'], next_state_dim=hps['next_state_dim'])
+    model = models.MPNNModel(graph_spec, output_dim=1, message_dim=hps['message_dim'], next_state_dim=hps['next_state_dim'])
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
                   loss=tf.keras.losses.MeanAbsolutePercentageError(),
                   metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
@@ -79,32 +80,56 @@ def main():
             test_dataset = baseline_models.prepare_dataset_for_baseline(test_dataset)
             print("Dataset prepared.")
 
+        # For GNN models, we need the graph_spec to build the model.
+        # We also need to remove the 'label' feature from the spec before passing it to the model.
+        graph_spec = train_dataset.element_spec
+        features_spec = dict(graph_spec.node_sets_spec['node'].features_spec)
+        del features_spec['label']
+        input_graph_spec = tfgnn.GraphTensorSpec.from_piece_specs(
+            edge_sets_spec=graph_spec.edge_sets_spec,
+            node_sets_spec={'node': tfgnn.NodeSetSpec.from_field_specs(
+                features_spec=features_spec,
+                sizes_spec=graph_spec.node_sets_spec['node'].sizes_spec)}
+        )
+
         builder_map = {
-            "gcn": build_and_compile_gcn,
-            "gat": build_and_compile_gat,
-            "mpnn": build_and_compile_mpnn,
+            "gcn": lambda hps: build_and_compile_gcn(input_graph_spec, hps),
+            "gat": lambda hps: build_and_compile_gat(input_graph_spec, hps),
+            "mpnn": lambda hps: build_and_compile_mpnn(input_graph_spec, hps),
             "mlp": build_and_compile_mlp,
         }
         model = builder_map[args.model](hps)
 
+        def extract_labels(graph: tfgnn.GraphTensor):
+            labels = graph.node_sets['node']['label']
+            features = graph.node_sets['node'].get_features_dict()
+            del features['label']
+            graph = graph.replace_features(node_sets={'node': features})
+            # Return the flat values of the ragged labels tensor to make it dense.
+            return graph, labels.values
+
+        train_dataset_with_labels = train_dataset.batch(args.batch_size).map(extract_labels)
+        val_dataset_with_labels = val_dataset.batch(args.batch_size).map(extract_labels)
+        test_dataset_with_labels = test_dataset.batch(args.batch_size).map(extract_labels)
+
         print(f"Training {args.model.upper()} model for {args.epochs} epochs...")
         model.fit(
-            train_dataset.batch(args.batch_size),
-            validation_data=val_dataset.batch(args.batch_size),
+            train_dataset_with_labels,
+            validation_data=val_dataset_with_labels,
             epochs=args.epochs,
             verbose=2
         )
         print("Training complete.")
 
         print("Evaluating model on the test set...")
-        loss, mse, mae = model.evaluate(test_dataset.batch(args.batch_size))
+        loss, mse, mae = model.evaluate(test_dataset_with_labels)
         print(f"Test MAPE (Loss): {loss:.4f}")
         print(f"Test MSE: {mse:.4f}")
         print(f"Test MAE: {mae:.4f}")
 
-        print(f"Saving model to {model_save_path}...")
-        model.save(model_save_path)
-        print("Model saved.")
+        # print(f"Saving model to {model_save_path}...")
+        # model.save(model_save_path)
+        # print("Model saved.")
 
     elif args.model == "svm":
         print("Preparing dataset for SVM baseline...")
