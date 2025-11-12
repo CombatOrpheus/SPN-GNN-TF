@@ -44,6 +44,43 @@ def GCNModel(graph_spec, units, output_dim):
     predictions = tf.keras.layers.Dense(output_dim)(node_features)
     return tf.keras.Model(inputs=input_graph, outputs=predictions)
 
+def build_and_compile_gcn(graph_spec, hps):
+    """Builds and compiles a GCN model from hyperparameters."""
+    model = GCNModel(graph_spec, units=hps['units'], output_dim=1)
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
+                  loss=tf.keras.losses.MeanAbsolutePercentageError(),
+                  metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
+    return model
+
+def build_and_compile_gat(graph_spec, hps):
+    """Builds and compiles a GAT model from hyperparameters."""
+    model = GATModel(graph_spec, units=hps['units'], output_dim=1, num_heads=hps['num_heads'])
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
+                  loss=tf.keras.losses.MeanAbsolutePercentageError(),
+                  metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
+    return model
+
+def build_and_compile_mpnn(graph_spec, hps):
+    """Builds and compiles an MPNN model from hyperparameters."""
+    model = MPNNModel(graph_spec, output_dim=1, message_dim=hps['message_dim'], next_state_dim=hps['next_state_dim'])
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
+                  loss=tf.keras.losses.MeanAbsolutePercentageError(),
+                  metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
+    return model
+
+def build_and_compile_mlp(hps):
+    """Builds and compiles an MLP model from hyperparameters."""
+    model = tf.keras.Sequential()
+    model.add(tf.keras.layers.Input(shape=(None, 7)))  # Shape from prepare_dataset_for_baseline
+    model.add(tf.keras.layers.Masking(mask_value=-1.))
+    for _ in range(hps['num_layers']):
+        model.add(tf.keras.layers.Dense(hps['units'], activation=hps['activation']))
+    model.add(tf.keras.layers.Dense(1))
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
+                  loss=tf.keras.losses.MeanAbsolutePercentageError(),
+                  metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
+    return model
+
 def GATModel(graph_spec, units, output_dim, num_heads=4):
     """Builds a GAT model using the Keras Functional API."""
     input_graph = tf.keras.Input(type_spec=graph_spec)

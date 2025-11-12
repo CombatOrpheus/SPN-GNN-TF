@@ -8,13 +8,16 @@ import json
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import mean_absolute_error, mean_squared_error, mean_absolute_percentage_error
+from src.spn_gnn_performance import tf_dataset
 from src.spn_gnn_performance.tf_dataset import load_dataset
 from src.spn_gnn_performance.baseline_models import prepare_dataset_for_baseline
-from src.spn_gnn_performance.models import GCNModel, GATModel, MPNNModel
+from src.spn_gnn_performance import models
 import tensorflow_gnn as tfgnn
 
 def calculate_metrics(y_true, y_pred):
     """Calculates and returns a dictionary of regression metrics."""
+    if len(y_true) == 0 or len(y_pred) == 0:
+        return {"mae": float('nan'), "mse": float('nan'), "mape": float('nan')}
     return {
         "mae": mean_absolute_error(y_true, y_pred),
         "mse": mean_squared_error(y_true, y_pred),
@@ -50,17 +53,15 @@ def main():
     """Main function to run the evaluation."""
     parser = argparse.ArgumentParser(description="Run evaluation on a pre-trained model.")
     parser.add_argument("--model-type", type=str, required=True, choices=["gcn", "gat", "mpnn", "svm", "mlp"], help="The model type to evaluate.")
-    parser.add_argument("--hyperparameters-path", type=str, required=True, help="Path to the hyperparameters file.")
+    parser.add_argument("--model-weights-path", type=str, help="Path to the trained model weights file (.h5).")
+    parser.add_argument("--model-path", type=str, help="Path to the trained scikit-learn model file (.joblib).")
+    parser.add_argument("--hyperparameters-path", type=str, help="Path to the hyperparameters file for TF models.")
     parser.add_argument("--dataset-path", type=str, required=True, help="Path to the evaluation dataset in JSON-L format.")
     parser.add_argument("--output-dir", type=str, required=True, help="Directory to save output files (metrics and plots).")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
     print("Loading data...")
-
-    # Load hyperparameters
-    with open(args.hyperparameters_path, 'r') as f:
-        hps = json.load(f)
 
     # Load and potentially prepare the dataset
     dataset = load_dataset(args.dataset_path)
@@ -70,50 +71,84 @@ def main():
     else:
         eval_dataset = dataset.batch(1)
 
-    print("Data loaded successfully. Building model...")
+    print("Data loaded successfully. Loading model...")
 
-    # Build model
-    if args.model_type == "gcn":
-        graph_spec = dataset.element_spec
-        features_spec = dict(graph_spec.node_sets_spec['node'].features_spec)
-        del features_spec['label']
-        input_graph_spec = tfgnn.GraphTensorSpec.from_piece_specs(
-            edge_sets_spec=graph_spec.edge_sets_spec,
-            node_sets_spec={'node': tfgnn.NodeSetSpec.from_field_specs(
-                features_spec=features_spec,
-                sizes_spec=graph_spec.node_sets_spec['node'].sizes_spec)}
-        )
-        model = GCNModel(input_graph_spec, units=hps['units'], output_dim=1)
-    # Add other model types here
+    # Load model
+    if args.model_type == "svm":
+        if not args.model_path:
+            raise ValueError("SVM model requires --model-path.")
+        model = joblib.load(args.model_path)
+    elif args.model_type in ["gcn", "gat", "mpnn", "mlp"]:
+        if not args.model_weights_path or not args.hyperparameters_path:
+            raise ValueError("TensorFlow models require --model-weights-path and --hyperparameters-path.")
+        with open(args.hyperparameters_path, 'r') as f:
+            hps = json.load(f)
+
+        if args.model_type == "mlp":
+            model = models.build_and_compile_mlp(hps)
+        else: # GNN model
+            graph_spec = dataset.element_spec
+            features_spec = dict(graph_spec.node_sets_spec['node'].features_spec)
+            del features_spec['label']
+            input_graph_spec = tfgnn.GraphTensorSpec.from_piece_specs(
+                edge_sets_spec=graph_spec.edge_sets_spec,
+                node_sets_spec={'node': tfgnn.NodeSetSpec.from_field_specs(
+                    features_spec=features_spec,
+                    sizes_spec=graph_spec.node_sets_spec['node'].sizes_spec)}
+            )
+            builder_fn = getattr(models, f"build_and_compile_{args.model_type}")
+            model = builder_fn(input_graph_spec, hps)
+
+        model.load_weights(args.model_weights_path)
     else:
         raise ValueError(f"Unsupported model type: {args.model_type}")
 
-    print("Model built successfully. Starting evaluation...")
+    print("Model loaded successfully. Starting evaluation...")
 
     # Get predictions and true labels
     y_true_all, y_pred_all, is_place_all = [], [], []
     if is_baseline_model:
-        for features, labels in eval_dataset:
-            features_np = features.numpy().reshape(-1, features.shape[-1])
-            labels_np = labels.numpy().ravel()
-            mask = ~np.all(features_np == -1, axis=1)
-            y_true_all.extend(labels_np[mask])
-            is_place_all.extend(features_np[mask, 0] == 1)
-            preds = model.predict(features)
-            y_pred_all.extend(preds.ravel()[mask])
+        all_data = list(eval_dataset.as_numpy_iterator())
+        all_features = np.array([item[0] for item in all_data])
+        all_labels = np.array([item[1] for item in all_data])
+
+        if args.model_type == "svm":
+            y_pred_flat = model.predict(all_features)
+        elif args.model_type == "mlp":
+            preds = model.predict(all_features)
+            y_pred_flat = preds.ravel()
+
+        features_flat = all_features.reshape(-1, all_features.shape[-1])
+        labels_flat = all_labels.ravel()
+
+        mask = ~np.all(features_flat == -1, axis=1)
+
+        y_true_all = labels_flat[mask]
+        is_place_all = (features_flat[mask, 0] == 1)
+
+        if args.model_type == "svm":
+            y_pred_all = y_pred_flat
+        else:
+            y_pred_all = y_pred_flat[mask]
+
     else: # GNN model
         for graph in eval_dataset:
             labels = graph.node_sets['node']['label']
             y_true_all.extend(labels.values.numpy().flatten())
+
             features = graph.node_sets['node'].get_features_dict()
             del features['label']
             graph = graph.replace_features(node_sets={'node': features})
+
             preds = model.predict_on_batch(graph)
             y_pred_all.extend(preds.flatten())
+
             node_features = graph.node_sets["node"]["hidden_state"].numpy()[0]
             is_place_all.extend(node_features[:, 0] == 1)
 
     y_true, y_pred, is_place = np.array(y_true_all), np.array(y_pred_all), np.array(is_place_all)
+
+    is_place = is_place.astype(bool)
     is_transition = ~is_place
 
     # Calculate metrics
@@ -152,5 +187,4 @@ def main():
     print(f"\nOutputs saved to {args.output_dir}")
 
 if __name__ == "__main__":
-    # export PYTHONPATH=$PYTHONPATH:src
     main()

@@ -61,19 +61,26 @@ def build_mpnn_model(graph_spec):
 
 def tune_svm_model(X, y):
     """Tunes the SVM model using Bayesian optimization."""
-    param_space = {
-        'C': Real(1e-6, 1e+6, prior='log-uniform'),
-        'gamma': Real(1e-6, 1e+1, prior='log-uniform'),
-        'degree': Integer(1, 8),
-        'kernel': Categorical(['linear', 'poly', 'rbf']),
-    }
+    param_space = [
+        ({
+            'kernel': Categorical(['linear', 'rbf']),
+            'C': Real(1e-6, 1e+6, prior='log-uniform'),
+            'gamma': Real(1e-6, 1e+1, prior='log-uniform'),
+        }, 16),
+        ({
+            'kernel': Categorical(['poly']),
+            'C': Real(1e-6, 1e+6, prior='log-uniform'),
+            'gamma': Real(1e-6, 1e+1, prior='log-uniform'),
+            'degree': Integer(1, 8),
+        }, 16),
+    ]
 
     model = baseline_models.SVMModel()
 
     search = BayesSearchCV(
         estimator=model,
         search_spaces=param_space,
-        n_iter=32,
+        n_iter=1,
         cv=3,
         n_jobs=-1,
         verbose=0,

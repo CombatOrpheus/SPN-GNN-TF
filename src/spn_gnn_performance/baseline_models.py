@@ -122,8 +122,13 @@ from sklearn.base import BaseEstimator, RegressorMixin
 class SVMModel(BaseEstimator, RegressorMixin):
     """A wrapper for the scikit-learn SVR model."""
 
-    def __init__(self, **kwargs):
-        self.model = SVR(**kwargs)
+    def __init__(self, C=1.0, epsilon=0.1, kernel='rbf', gamma='scale', degree=3):
+        self.C = C
+        self.epsilon = epsilon
+        self.kernel = kernel
+        self.gamma = gamma
+        self.degree = degree
+        self.model = SVR(C=C, epsilon=epsilon, kernel=kernel, gamma=gamma, degree=degree)
 
     def fit(self, X, y):
         # Flatten the features and labels

@@ -8,6 +8,7 @@ import keras_tuner as kt
 from spn_gnn_performance import tuning, tf_dataset, baseline_models
 import matplotlib.pyplot as plt
 import tensorflow_gnn as tfgnn
+import numpy as np
 
 def main():
     parser = argparse.ArgumentParser(description="Run hyperparameter tuning for SPN GNN models.")
@@ -88,12 +89,12 @@ def main():
 
     elif args.model == "svm":
         dataset = tf_dataset.load_dataset(args.dataset_path)
-        train_dataset, _ = tf_dataset.split_dataset(dataset)
+        train_dataset, _, _ = tf_dataset.split_dataset(dataset)
 
         # This can be memory intensive, consider using a smaller subset for tuning
         data = list(baseline_models.prepare_dataset_for_baseline(train_dataset).as_numpy_iterator())
-        X_train = [item[0] for item in data]
-        y_train = [item[1] for item in data]
+        X_train = np.array([item[0] for item in data])
+        y_train = np.array([item[1] for item in data])
 
         best_params, cv_results = tuning.tune_svm_model(X_train, y_train)
 
