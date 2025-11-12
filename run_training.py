@@ -10,45 +10,6 @@ import numpy as np
 import joblib
 from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error, mean_absolute_error
 
-
-def build_and_compile_gcn(graph_spec, hps):
-    """Builds and compiles a GCN model from hyperparameters."""
-    model = models.GCNModel(graph_spec, units=hps['units'], output_dim=1)
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
-                  loss=tf.keras.losses.MeanAbsolutePercentageError(),
-                  metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
-    return model
-
-def build_and_compile_gat(graph_spec, hps):
-    """Builds and compiles a GAT model from hyperparameters."""
-    model = models.GATModel(graph_spec, units=hps['units'], output_dim=1, num_heads=hps['num_heads'])
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
-                  loss=tf.keras.losses.MeanAbsolutePercentageError(),
-                  metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
-    return model
-
-def build_and_compile_mpnn(graph_spec, hps):
-    """Builds and compiles an MPNN model from hyperparameters."""
-    model = models.MPNNModel(graph_spec, output_dim=1, message_dim=hps['message_dim'], next_state_dim=hps['next_state_dim'])
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
-                  loss=tf.keras.losses.MeanAbsolutePercentageError(),
-                  metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
-    return model
-
-def build_and_compile_mlp(hps):
-    """Builds and compiles an MLP model from hyperparameters."""
-    model = tf.keras.Sequential()
-    model.add(tf.keras.layers.Input(shape=(None, 7)))  # Shape from prepare_dataset_for_baseline
-    model.add(tf.keras.layers.Masking(mask_value=-1.))
-    for _ in range(hps['num_layers']):
-        model.add(tf.keras.layers.Dense(hps['units'], activation=hps['activation']))
-    model.add(tf.keras.layers.Dense(1))
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
-                  loss=tf.keras.losses.MeanAbsolutePercentageError(),
-                  metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
-    return model
-
-
 def main():
     parser = argparse.ArgumentParser(description="Train a model with tuned hyperparameters.")
     parser.add_argument("model", choices=["gcn", "gat", "mpnn", "svm", "mlp"], help="The model to train.")
@@ -80,37 +41,38 @@ def main():
             test_dataset = baseline_models.prepare_dataset_for_baseline(test_dataset)
             print("Dataset prepared.")
 
-        # For GNN models, we need the graph_spec to build the model.
-        # We also need to remove the 'label' feature from the spec before passing it to the model.
-        graph_spec = train_dataset.element_spec
-        features_spec = dict(graph_spec.node_sets_spec['node'].features_spec)
-        del features_spec['label']
-        input_graph_spec = tfgnn.GraphTensorSpec.from_piece_specs(
-            edge_sets_spec=graph_spec.edge_sets_spec,
-            node_sets_spec={'node': tfgnn.NodeSetSpec.from_field_specs(
-                features_spec=features_spec,
-                sizes_spec=graph_spec.node_sets_spec['node'].sizes_spec)}
-        )
+            model = models.build_and_compile_mlp(hps)
+            train_dataset_with_labels = train_dataset.batch(args.batch_size)
+            val_dataset_with_labels = val_dataset.batch(args.batch_size)
+            test_dataset_with_labels = test_dataset.batch(args.batch_size)
 
-        builder_map = {
-            "gcn": lambda hps: build_and_compile_gcn(input_graph_spec, hps),
-            "gat": lambda hps: build_and_compile_gat(input_graph_spec, hps),
-            "mpnn": lambda hps: build_and_compile_mpnn(input_graph_spec, hps),
-            "mlp": build_and_compile_mlp,
-        }
-        model = builder_map[args.model](hps)
+        else: # GNN models
+            # For GNN models, we need the graph_spec to build the model.
+            # We also need to remove the 'label' feature from the spec before passing it to the model.
+            graph_spec = train_dataset.element_spec
+            features_spec = dict(graph_spec.node_sets_spec['node'].features_spec)
+            del features_spec['label']
+            input_graph_spec = tfgnn.GraphTensorSpec.from_piece_specs(
+                edge_sets_spec=graph_spec.edge_sets_spec,
+                node_sets_spec={'node': tfgnn.NodeSetSpec.from_field_specs(
+                    features_spec=features_spec,
+                    sizes_spec=graph_spec.node_sets_spec['node'].sizes_spec)}
+            )
 
-        def extract_labels(graph: tfgnn.GraphTensor):
-            labels = graph.node_sets['node']['label']
-            features = graph.node_sets['node'].get_features_dict()
-            del features['label']
-            graph = graph.replace_features(node_sets={'node': features})
-            # Return the flat values of the ragged labels tensor to make it dense.
-            return graph, labels.values
+            builder_fn = getattr(models, f"build_and_compile_{args.model}")
+            model = builder_fn(input_graph_spec, hps)
 
-        train_dataset_with_labels = train_dataset.batch(args.batch_size).map(extract_labels)
-        val_dataset_with_labels = val_dataset.batch(args.batch_size).map(extract_labels)
-        test_dataset_with_labels = test_dataset.batch(args.batch_size).map(extract_labels)
+            def extract_labels(graph: tfgnn.GraphTensor):
+                labels = graph.node_sets['node']['label']
+                features = graph.node_sets['node'].get_features_dict()
+                del features['label']
+                graph = graph.replace_features(node_sets={'node': features})
+                # Return the flat values of the ragged labels tensor to make it dense.
+                return graph, labels.values
+
+            train_dataset_with_labels = train_dataset.batch(args.batch_size).map(extract_labels)
+            val_dataset_with_labels = val_dataset.batch(args.batch_size).map(extract_labels)
+            test_dataset_with_labels = test_dataset.batch(args.batch_size).map(extract_labels)
 
         print(f"Training {args.model.upper()} model for {args.epochs} epochs...")
         model.fit(
@@ -127,9 +89,9 @@ def main():
         print(f"Test MSE: {mse:.4f}")
         print(f"Test MAE: {mae:.4f}")
 
-        # print(f"Saving model to {model_save_path}...")
-        # model.save(model_save_path)
-        # print("Model saved.")
+        print(f"Saving model weights to {model_save_path}.weights.h5...")
+        model.save_weights(f"{model_save_path}.weights.h5")
+        print("Model weights saved.")
 
     elif args.model == "svm":
         print("Preparing dataset for SVM baseline...")
