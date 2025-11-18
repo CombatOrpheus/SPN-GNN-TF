@@ -11,6 +11,17 @@ import tensorflow_gnn as tfgnn
 import numpy as np
 
 def main():
+    """Runs hyperparameter tuning for a specified model.
+
+    This script tunes the hyperparameters of a given model using a specified
+    dataset. The tuning results, including the best hyperparameters, all trial
+    results, and a tuning plot, are saved to the 'tuning_results' directory.
+
+    Command-line arguments:
+        model (str): The model to tune (choices: "gcn", "gat", "mpnn", "svm",
+            "mlp").
+        dataset_path (str): Path to the JSON-L dataset.
+    """
     parser = argparse.ArgumentParser(description="Run hyperparameter tuning for SPN GNN models.")
     parser.add_argument("model", choices=["gcn", "gat", "mpnn", "svm", "mlp"], help="The model to tune.")
     parser.add_argument("dataset_path", help="Path to the JSON-L dataset.")

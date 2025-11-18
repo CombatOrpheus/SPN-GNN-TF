@@ -6,9 +6,17 @@ import tensorflow_gnn as tfgnn
 from typing import Tuple
 
 def _parse_spn_json_and_build_graph(json_string: tf.Tensor) -> tfgnn.GraphTensor:
-    """
-    Parses a JSON-L string, extracts SPN data, and constructs a GraphTensor.
-    The regression labels are stored as a 'label' feature in the node set.
+    """Parses a JSON-L string and constructs a GraphTensor.
+
+    Extracts SPN data, node features, labels, and edge information to build a
+    homogeneous graph representation. The regression labels are stored as a
+    'label' feature in the node set.
+
+    Args:
+        json_string (tf.Tensor): A scalar tensor containing the JSON-L string.
+
+    Returns:
+        tfgnn.GraphTensor: The constructed GraphTensor.
     """
     data = json.loads(json_string.numpy().decode("utf-8"))
 
@@ -83,8 +91,13 @@ def _parse_spn_json_and_build_graph(json_string: tf.Tensor) -> tfgnn.GraphTensor
     return graph
 
 def load_dataset(file_path: str) -> tf.data.Dataset:
-    """
-    Creates a tf.data.Dataset from a JSON-L file of SPN data.
+    """Creates a tf.data.Dataset from a JSON-L file of SPN data.
+
+    Args:
+        file_path (str): The path to the JSON-L file.
+
+    Returns:
+        tf.data.Dataset: A dataset of GraphTensors.
     """
     graph_spec = tfgnn.GraphTensorSpec.from_piece_specs(
         node_sets_spec={
@@ -114,8 +127,23 @@ def load_dataset(file_path: str) -> tf.data.Dataset:
         output_signature=graph_spec
     )
 
-def split_dataset(dataset: tf.data.Dataset, train_split=0.8, val_split=0.1, shuffle=True, seed=42):
-    """Splits a dataset into training, validation, and test sets."""
+def split_dataset(dataset: tf.data.Dataset, train_split=0.8, val_split=0.1, shuffle=True, seed=42) -> Tuple[tf.data.Dataset, tf.data.Dataset, tf.data.Dataset]:
+    """Splits a dataset into training, validation, and test sets.
+
+    Args:
+        dataset (tf.data.Dataset): The dataset to split.
+        train_split (float, optional): The proportion of the dataset to use for
+            training. Defaults to 0.8.
+        val_split (float, optional): The proportion of the dataset to use for
+            validation. Defaults to 0.1.
+        shuffle (bool, optional): Whether to shuffle the dataset before
+            splitting. Defaults to True.
+        seed (int, optional): The random seed for shuffling. Defaults to 42.
+
+    Returns:
+        Tuple[tf.data.Dataset, tf.data.Dataset, tf.data.Dataset]: A tuple
+            containing the training, validation, and test datasets.
+    """
     dataset_size = dataset.cardinality()
     if dataset_size == tf.data.experimental.UNKNOWN_CARDINALITY:
         # Fallback for datasets with unknown cardinality

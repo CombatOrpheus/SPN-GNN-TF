@@ -15,7 +15,15 @@ from src.spn_gnn_performance import models
 import tensorflow_gnn as tfgnn
 
 def calculate_metrics(y_true, y_pred):
-    """Calculates and returns a dictionary of regression metrics."""
+    """Calculates and returns a dictionary of regression metrics.
+
+    Args:
+        y_true (np.ndarray): The true target values.
+        y_pred (np.ndarray): The predicted values.
+
+    Returns:
+        dict: A dictionary of regression metrics (MAE, MSE, MAPE).
+    """
     if len(y_true) == 0 or len(y_pred) == 0:
         return {"mae": float('nan'), "mse": float('nan'), "mape": float('nan')}
     return {
@@ -25,7 +33,17 @@ def calculate_metrics(y_true, y_pred):
     }
 
 def save_plots(y_true, y_pred, is_place, output_dir):
-    """Generates and saves evaluation plots."""
+    """Generates and saves evaluation plots.
+
+    Creates a scatter plot of predicted vs. true values and a residual plot.
+
+    Args:
+        y_true (np.ndarray): The true target values.
+        y_pred (np.ndarray): The predicted values.
+        is_place (np.ndarray): A boolean array indicating which nodes are
+            places.
+        output_dir (str): The directory to save the plots to.
+    """
     # Scatter Plot
     plt.figure(figsize=(10, 6))
     sns.scatterplot(x=y_true, y=y_pred, hue=np.where(is_place, 'Place', 'Transition'), alpha=0.6)
