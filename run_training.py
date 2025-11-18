@@ -11,6 +11,21 @@ import joblib
 from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error, mean_absolute_error
 
 def main():
+    """Trains a model with tuned hyperparameters.
+
+    This script trains a specified model using a given dataset and a JSON file
+    containing tuned hyperparameters. The trained model is saved to the
+    'training_results' directory.
+
+    Command-line arguments:
+        model (str): The model to train (choices: "gcn", "gat", "mpnn",
+            "svm", "mlp").
+        dataset_path (str): Path to the JSON-L dataset.
+        hyperparameters_path (str): Path to the JSON file with tuned
+            hyperparameters.
+        --epochs (int, optional): Number of training epochs. Defaults to 50.
+        --batch_size (int, optional): Batch size for training. Defaults to 32.
+    """
     parser = argparse.ArgumentParser(description="Train a model with tuned hyperparameters.")
     parser.add_argument("model", choices=["gcn", "gat", "mpnn", "svm", "mlp"], help="The model to train.")
     parser.add_argument("dataset_path", help="Path to the JSON-L dataset.")

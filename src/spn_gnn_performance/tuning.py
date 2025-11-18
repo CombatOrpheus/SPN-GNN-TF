@@ -10,7 +10,14 @@ from spn_gnn_performance import baseline_models, models
 
 
 def build_gcn_model(graph_spec):
-    """Returns a function that builds a GCN model for KerasTuner."""
+    """Returns a function that builds a GCN model for KerasTuner.
+
+    Args:
+        graph_spec (tfgnn.GraphTensorSpec): The spec of the input graph.
+
+    Returns:
+        function: A function that builds a GCN model.
+    """
     def build_fn(hp):
         units = hp.Int("units", min_value=32, max_value=256, step=32)
         learning_rate = hp.Float("learning_rate", min_value=1e-4, max_value=1e-2, sampling="log")
@@ -26,7 +33,14 @@ def build_gcn_model(graph_spec):
 
 
 def build_gat_model(graph_spec):
-    """Returns a function that builds a GAT model for KerasTuner."""
+    """Returns a function that builds a GAT model for KerasTuner.
+
+    Args:
+        graph_spec (tfgnn.GraphTensorSpec): The spec of the input graph.
+
+    Returns:
+        function: A function that builds a GAT model.
+    """
     def build_fn(hp):
         units = hp.Int("units", min_value=32, max_value=256, step=32)
         num_heads = hp.Int("num_heads", min_value=2, max_value=8, step=2)
@@ -43,7 +57,14 @@ def build_gat_model(graph_spec):
 
 
 def build_mpnn_model(graph_spec):
-    """Returns a function that builds an MPNN model for KerasTuner."""
+    """Returns a function that builds an MPNN model for KerasTuner.
+
+    Args:
+        graph_spec (tfgnn.GraphTensorSpec): The spec of the input graph.
+
+    Returns:
+        function: A function that builds an MPNN model.
+    """
     def build_fn(hp):
         message_dim = hp.Int("message_dim", min_value=32, max_value=128, step=32)
         next_state_dim = hp.Int("next_state_dim", min_value=32, max_value=128, step=32)
@@ -60,7 +81,16 @@ def build_mpnn_model(graph_spec):
 
 
 def tune_svm_model(X, y):
-    """Tunes the SVM model using Bayesian optimization."""
+    """Tunes the SVM model using Bayesian optimization.
+
+    Args:
+        X (np.ndarray): The training input samples.
+        y (np.ndarray): The target values.
+
+    Returns:
+        tuple: A tuple containing the best hyperparameters and the cross-validation
+            results.
+    """
     param_space = [
         ({
             'kernel': Categorical(['linear', 'rbf']),
@@ -102,7 +132,14 @@ def tune_svm_model(X, y):
 
 
 def build_mlp_model(hp):
-    """Builds an MLP model for KerasTuner."""
+    """Builds an MLP model for KerasTuner.
+
+    Args:
+        hp (kt.HyperParameters): The KerasTuner hyperparameter object.
+
+    Returns:
+        tf.keras.Model: A compiled MLP model.
+    """
     num_layers = hp.Int("num_layers", min_value=1, max_value=3, step=1)
     units = hp.Int("units", min_value=32, max_value=256, step=32)
     activation = hp.Choice("activation", values=["relu", "tanh"])
