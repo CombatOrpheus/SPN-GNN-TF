@@ -32,6 +32,29 @@ def build_gcn_model(graph_spec):
     return build_fn
 
 
+def build_het_gcn_model(graph_spec):
+    """Returns a function that builds a heterogeneous GCN model for KerasTuner.
+
+    Args:
+        graph_spec (tfgnn.GraphTensorSpec): The spec of the input graph.
+
+    Returns:
+        function: A function that builds a heterogeneous GCN model.
+    """
+    def build_fn(hp):
+        units = hp.Int("units", min_value=32, max_value=256, step=32)
+        learning_rate = hp.Float("learning_rate", min_value=1e-4, max_value=1e-2, sampling="log")
+
+        model = models.HetGCNModel(graph_spec, units=units, output_dim=1)
+
+        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        loss = tf.keras.losses.MeanAbsolutePercentageError()
+
+        model.compile(optimizer=optimizer, loss=loss, metrics=['mae'])
+        return model
+    return build_fn
+
+
 def build_gat_model(graph_spec):
     """Returns a function that builds a GAT model for KerasTuner.
 

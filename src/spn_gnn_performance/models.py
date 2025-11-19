@@ -71,6 +71,59 @@ def GCNModel(graph_spec, units, output_dim):
     predictions = tf.keras.layers.Dense(output_dim)(node_features)
     return tf.keras.Model(inputs=input_graph, outputs=predictions)
 
+
+def HetGCNModel(graph_spec, units, output_dim):
+    """Builds a heterogeneous GCN model."""
+    input_graph = tf.keras.Input(type_spec=graph_spec)
+    graph = input_graph.merge_batch_to_components()
+
+    def set_initial_state(node_set, node_set_name):
+        return tfgnn.keras.layers.MapFeatures(
+            out_features={"hidden_state": tf.keras.layers.Dense(units)(node_set["hidden_state"])}
+        )(node_set)
+
+    graph = tfgnn.keras.layers.GraphUpdate(
+        node_sets={
+            "place": set_initial_state,
+            "transition": set_initial_state,
+        }
+    )(graph)
+
+    graph = tfgnn.keras.layers.GraphUpdate(
+        node_sets={
+            "place": tfgnn.keras.layers.NodeSetUpdate(
+                {"t_to_p": tfgnn.keras.layers.SimpleConv(
+                    message_fn=message_fn_factory(units),
+                    reduce_type="sum",
+                    sender_edge_feature="weight",
+                    receiver_tag=tfgnn.TARGET)},
+                tfgnn.keras.layers.NextStateFromConcat(dense_layer(units))
+            ),
+            "transition": tfgnn.keras.layers.NodeSetUpdate(
+                {"p_to_t": tfgnn.keras.layers.SimpleConv(
+                    message_fn=message_fn_factory(units),
+                    reduce_type="sum",
+                    sender_edge_feature="weight",
+                    receiver_tag=tfgnn.TARGET)},
+                tfgnn.keras.layers.NextStateFromConcat(dense_layer(units))
+            )
+        }
+    )(graph)
+
+    place_predictions = tf.keras.layers.Dense(output_dim)(graph.node_sets["place"]["hidden_state"])
+    transition_predictions = tf.keras.layers.Dense(output_dim)(graph.node_sets["transition"]["hidden_state"])
+
+    return tf.keras.Model(inputs=input_graph, outputs={"place": place_predictions, "transition": transition_predictions})
+
+
+def build_and_compile_het_gcn(graph_spec, hps):
+    """Builds and compiles a heterogeneous GCN model from hyperparameters."""
+    model = HetGCNModel(graph_spec, units=hps['units'], output_dim=1)
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
+                  loss=tf.keras.losses.MeanAbsolutePercentageError(),
+                  metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
+    return model
+
 def build_and_compile_gcn(graph_spec, hps):
     """Builds and compiles a GCN model from hyperparameters.
 
