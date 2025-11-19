@@ -5,7 +5,7 @@ import json
 import os
 import tensorflow as tf
 import tensorflow_gnn as tfgnn
-from spn_gnn_performance import tf_dataset, baseline_models, models
+from src.spn_gnn_performance import tf_dataset, baseline_models, models
 import numpy as np
 import joblib
 from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error, mean_absolute_error

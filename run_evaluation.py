@@ -8,10 +8,7 @@ import json
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import mean_absolute_error, mean_squared_error, mean_absolute_percentage_error
-from src.spn_gnn_performance import tf_dataset
-from src.spn_gnn_performance.tf_dataset import load_dataset
-from src.spn_gnn_performance.baseline_models import prepare_dataset_for_baseline
-from src.spn_gnn_performance import models
+from src.spn_gnn_performance import tf_dataset, baseline_models, models
 import tensorflow_gnn as tfgnn
 
 def calculate_metrics(y_true, y_pred):
@@ -82,10 +79,10 @@ def main():
     print("Loading data...")
 
     # Load and potentially prepare the dataset
-    dataset = load_dataset(args.dataset_path)
+    dataset = tf_dataset.load_dataset(args.dataset_path)
     is_baseline_model = args.model_type in ["svm", "mlp"]
     if is_baseline_model:
-        eval_dataset = prepare_dataset_for_baseline(dataset)
+        eval_dataset = baseline_models.prepare_dataset_for_baseline(dataset)
     else:
         eval_dataset = dataset.batch(1)
 

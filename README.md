@@ -20,12 +20,14 @@ pixi install
 
 This project provides three main scripts for hyperparameter tuning, training, and evaluation of the models.
 
+**Note:** All scripts should be run with `pixi run python` to ensure the correct environment is used.
+
 ### 1. Hyperparameter Tuning
 
 To run hyperparameter tuning for a specific model, use the `run_tuning.py` script. The following command will run Bayesian optimization to find the best hyperparameters for the GCN model using the provided dataset:
 
 ```bash
-python run_tuning.py gcn path/to/dataset.jsonl
+pixi run python run_tuning.py gcn path/to/dataset.jsonl
 ```
 
 The script will save the best hyperparameters, all trial results, and a tuning plot to the `tuning_results` directory.
@@ -35,7 +37,7 @@ The script will save the best hyperparameters, all trial results, and a tuning p
 Once you have tuned the hyperparameters, you can train a model using the `run_training.py` script. The following command will train a GCN model using the provided dataset and the best hyperparameters found in the tuning step:
 
 ```bash
-python run_training.py gcn path/to/dataset.jsonl tuning_results/gcn_best_hps.json
+pixi run python run_training.py gcn path/to/dataset.jsonl tuning_results/gcn_best_hps.json
 ```
 
 The trained model will be saved to the `training_results` directory.
@@ -45,7 +47,7 @@ The trained model will be saved to the `training_results` directory.
 Finally, you can evaluate a trained model using the `run_evaluation.py` script. The following command will evaluate a trained GCN model on a given dataset:
 
 ```bash
-python run_evaluation.py --model-type gcn --model-weights-path training_results/gcn_model.weights.h5 --hyperparameters-path tuning_results/gcn_best_hps.json --dataset-path path/to/dataset.jsonl --output-dir evaluation_results
+pixi run python run_evaluation.py --model-type gcn --model-weights-path training_results/gcn_model.weights.h5 --hyperparameters-path tuning_results/gcn_best_hps.json --dataset-path path/to/dataset.jsonl --output-dir evaluation_results
 ```
 
 The script will save the evaluation metrics (MAE, MSE, MAPE) and plots to the `evaluation_results` directory.

@@ -5,7 +5,7 @@ import json
 import os
 import pandas as pd
 import keras_tuner as kt
-from spn_gnn_performance import tuning, tf_dataset, baseline_models
+from src.spn_gnn_performance import tuning, tf_dataset, baseline_models
 import matplotlib.pyplot as plt
 import tensorflow_gnn as tfgnn
 import numpy as np
