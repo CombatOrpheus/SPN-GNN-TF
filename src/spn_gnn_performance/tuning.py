@@ -6,7 +6,7 @@ import tensorflow as tf
 import tensorflow_gnn as tfgnn
 from skopt import BayesSearchCV
 from skopt.space import Real, Categorical, Integer
-from spn_gnn_performance import baseline_models, models
+from . import baseline_models, models
 
 
 def build_gcn_model(graph_spec):
