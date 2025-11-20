@@ -2,6 +2,9 @@
 
 import tensorflow as tf
 import tensorflow_gnn as tfgnn
+from tensorflow_gnn.models import gat_v2
+from tensorflow_gnn.models import graph_sage
+from tensorflow_gnn.models import vanilla_mpnn
 
 def dense_layer(units, activation='relu'):
     """Creates a Sequential model with a single Dense layer.
@@ -77,16 +80,13 @@ def HetGCNModel(graph_spec, units, output_dim):
     input_graph = tf.keras.Input(type_spec=graph_spec)
     graph = input_graph.merge_batch_to_components()
 
-    def set_initial_state(node_set, node_set_name):
-        return tfgnn.keras.layers.MapFeatures(
-            out_features={"hidden_state": tf.keras.layers.Dense(units)(node_set["hidden_state"])}
-        )(node_set)
+    def set_initial_state_fn(node_set, node_set_name):
+        if node_set_name in ["place", "transition"]:
+            return {"hidden_state": tf.keras.layers.Dense(units)(node_set["hidden_state"])}
+        return None
 
-    graph = tfgnn.keras.layers.GraphUpdate(
-        node_sets={
-            "place": set_initial_state,
-            "transition": set_initial_state,
-        }
+    graph = tfgnn.keras.layers.MapFeatures(
+        node_sets_fn=set_initial_state_fn
     )(graph)
 
     graph = tfgnn.keras.layers.GraphUpdate(
@@ -116,9 +116,149 @@ def HetGCNModel(graph_spec, units, output_dim):
     return tf.keras.Model(inputs=input_graph, outputs={"place": place_predictions, "transition": transition_predictions})
 
 
+def HetGraphSAGEModel(graph_spec, units, output_dim):
+    """Builds a heterogeneous GraphSAGE model using tfgnn.models.graph_sage."""
+    input_graph = tf.keras.Input(type_spec=graph_spec)
+    graph = input_graph.merge_batch_to_components()
+
+    def set_initial_state_fn(node_set, node_set_name):
+        if node_set_name in ["place", "transition"]:
+            return {"hidden_state": tf.keras.layers.Dense(units)(node_set["hidden_state"])}
+        return None
+
+    graph = tfgnn.keras.layers.MapFeatures(
+        node_sets_fn=set_initial_state_fn
+    )(graph)
+
+    # Apply GraphSAGE GraphUpdate.
+    graph = graph_sage.GraphSAGEGraphUpdate(
+        node_set_names=["place", "transition"],
+        receiver_tag=tfgnn.TARGET,
+        units=units,
+        hidden_units=units,
+        name="graph_sage_1"
+    )(graph)
+
+    graph = graph_sage.GraphSAGEGraphUpdate(
+        node_set_names=["place", "transition"],
+        receiver_tag=tfgnn.TARGET,
+        units=units,
+        hidden_units=units,
+        name="graph_sage_2"
+    )(graph)
+
+    place_predictions = tf.keras.layers.Dense(output_dim)(graph.node_sets["place"]["hidden_state"])
+    transition_predictions = tf.keras.layers.Dense(output_dim)(graph.node_sets["transition"]["hidden_state"])
+
+    return tf.keras.Model(inputs=input_graph, outputs={"place": place_predictions, "transition": transition_predictions})
+
+
+def HetGATModel(graph_spec, units, output_dim, num_heads=4):
+    """Builds a heterogeneous GAT model using tfgnn.models.gat_v2."""
+    input_graph = tf.keras.Input(type_spec=graph_spec)
+    graph = input_graph.merge_batch_to_components()
+
+    def set_initial_state_fn(node_set, node_set_name):
+        if node_set_name in ["place", "transition"]:
+            return {"hidden_state": tf.keras.layers.Dense(units)(node_set["hidden_state"])}
+        return None
+
+    graph = tfgnn.keras.layers.MapFeatures(
+        node_sets_fn=set_initial_state_fn
+    )(graph)
+
+    # Ensure message_dim is divisible by num_heads
+    message_dim = units
+    if message_dim % num_heads != 0:
+        message_dim = (units // num_heads) * num_heads
+
+    graph = gat_v2.GATv2MPNNGraphUpdate(
+        units=units,
+        message_dim=message_dim,
+        num_heads=num_heads,
+        receiver_tag=tfgnn.TARGET,
+        node_set_names=["place", "transition"],
+        edge_feature="weight"
+    )(graph)
+
+    graph = gat_v2.GATv2MPNNGraphUpdate(
+        units=units,
+        message_dim=units,
+        num_heads=1,
+        receiver_tag=tfgnn.TARGET,
+        node_set_names=["place", "transition"],
+        edge_feature="weight"
+    )(graph)
+
+    place_predictions = tf.keras.layers.Dense(output_dim)(graph.node_sets["place"]["hidden_state"])
+    transition_predictions = tf.keras.layers.Dense(output_dim)(graph.node_sets["transition"]["hidden_state"])
+
+    return tf.keras.Model(inputs=input_graph, outputs={"place": place_predictions, "transition": transition_predictions})
+
+
+def HetMPNNModel(graph_spec, output_dim, message_dim=64, next_state_dim=64):
+    """Builds a heterogeneous MPNN model using tfgnn.models.vanilla_mpnn."""
+    input_graph = tf.keras.Input(type_spec=graph_spec)
+    graph = input_graph.merge_batch_to_components()
+
+    def set_initial_state_fn(node_set, node_set_name):
+        if node_set_name in ["place", "transition"]:
+            return {"hidden_state": tf.keras.layers.Dense(next_state_dim)(node_set["hidden_state"])}
+        return None
+
+    graph = tfgnn.keras.layers.MapFeatures(
+        node_sets_fn=set_initial_state_fn
+    )(graph)
+
+    graph = vanilla_mpnn.VanillaMPNNGraphUpdate(
+        units=next_state_dim,
+        message_dim=message_dim,
+        node_set_names=["place", "transition"],
+        receiver_tag=tfgnn.TARGET,
+        edge_feature="weight"
+    )(graph)
+
+    graph = vanilla_mpnn.VanillaMPNNGraphUpdate(
+        units=next_state_dim,
+        message_dim=message_dim,
+        node_set_names=["place", "transition"],
+        receiver_tag=tfgnn.TARGET,
+        edge_feature="weight"
+    )(graph)
+
+    place_predictions = tf.keras.layers.Dense(output_dim)(graph.node_sets["place"]["hidden_state"])
+    transition_predictions = tf.keras.layers.Dense(output_dim)(graph.node_sets["transition"]["hidden_state"])
+
+    return tf.keras.Model(inputs=input_graph, outputs={"place": place_predictions, "transition": transition_predictions})
+
+
 def build_and_compile_het_gcn(graph_spec, hps):
     """Builds and compiles a heterogeneous GCN model from hyperparameters."""
     model = HetGCNModel(graph_spec, units=hps['units'], output_dim=1)
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
+                  loss=tf.keras.losses.MeanAbsolutePercentageError(),
+                  metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
+    return model
+
+def build_and_compile_het_graph_sage(graph_spec, hps):
+    """Builds and compiles a heterogeneous GraphSAGE model from hyperparameters."""
+    model = HetGraphSAGEModel(graph_spec, units=hps['units'], output_dim=1)
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
+                  loss=tf.keras.losses.MeanAbsolutePercentageError(),
+                  metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
+    return model
+
+def build_and_compile_het_gat(graph_spec, hps):
+    """Builds and compiles a heterogeneous GAT model from hyperparameters."""
+    model = HetGATModel(graph_spec, units=hps['units'], output_dim=1, num_heads=hps['num_heads'])
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
+                  loss=tf.keras.losses.MeanAbsolutePercentageError(),
+                  metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
+    return model
+
+def build_and_compile_het_mpnn(graph_spec, hps):
+    """Builds and compiles a heterogeneous MPNN model from hyperparameters."""
+    model = HetMPNNModel(graph_spec, output_dim=1, message_dim=hps['message_dim'], next_state_dim=hps['next_state_dim'])
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
                   loss=tf.keras.losses.MeanAbsolutePercentageError(),
                   metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
@@ -210,10 +350,11 @@ def GATModel(graph_spec, units, output_dim, num_heads=4):
     graph = tfgnn.keras.layers.GraphUpdate(
         node_sets={"node": tfgnn.keras.layers.NodeSetUpdate(
             {"edge": tf.keras.Sequential([
-                tfgnn.keras.layers.GATv2Conv(
+                gat_v2.GATv2Conv(
                     num_heads=num_heads,
                     per_head_channels=units // num_heads,
-                    sender_edge_feature="weight"),
+                    sender_edge_feature="weight",
+                    receiver_tag=tfgnn.TARGET),
                 tf.keras.layers.Flatten()])},
             tfgnn.keras.layers.NextStateFromConcat(dense_layer(units)))}
     )(graph)
@@ -221,10 +362,11 @@ def GATModel(graph_spec, units, output_dim, num_heads=4):
     graph = tfgnn.keras.layers.GraphUpdate(
         node_sets={"node": tfgnn.keras.layers.NodeSetUpdate(
             {"edge": tf.keras.Sequential([
-                tfgnn.keras.layers.GATv2Conv(
+                gat_v2.GATv2Conv(
                     num_heads=1,
                     per_head_channels=units,
-                    sender_edge_feature="weight"),
+                    sender_edge_feature="weight",
+                    receiver_tag=tfgnn.TARGET),
                 tf.keras.layers.Flatten()])},
             tfgnn.keras.layers.NextStateFromConcat(dense_layer(units)))}
     )(graph)
