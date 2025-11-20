@@ -27,7 +27,7 @@ def main():
         --batch_size (int, optional): Batch size for training. Defaults to 32.
     """
     parser = argparse.ArgumentParser(description="Train a model with tuned hyperparameters.")
-    parser.add_argument("model", choices=["gcn", "gat", "mpnn", "svm", "mlp"], help="The model to train.")
+    parser.add_argument("model", choices=["gcn", "gat", "mpnn", "svm", "mlp", "het_gcn", "het_graph_sage", "het_gat", "het_mpnn"], help="The model to train.")
     parser.add_argument("dataset_path", help="Path to the JSON-L dataset.")
     parser.add_argument("hyperparameters_path", help="Path to the JSON file with tuned hyperparameters.")
     parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs.")
@@ -44,11 +44,14 @@ def main():
 
     # Load and split dataset
     print("Loading and splitting the dataset...")
-    dataset = tf_dataset.load_dataset(args.dataset_path)
+    if args.model in ["het_gcn", "het_graph_sage", "het_gat", "het_mpnn"]:
+        dataset = tf_dataset.load_heterogeneous_dataset(args.dataset_path)
+    else:
+        dataset = tf_dataset.load_dataset(args.dataset_path)
     train_dataset, val_dataset, test_dataset = tf_dataset.split_dataset(dataset, train_split=0.8, val_split=0.1)
     print("Dataset loaded and split.")
 
-    if args.model in ["gcn", "gat", "mpnn", "mlp"]:
+    if args.model in ["gcn", "gat", "mpnn", "mlp", "het_gcn", "het_graph_sage", "het_gat", "het_mpnn"]:
         if args.model == "mlp":
             print("Preparing dataset for MLP baseline...")
             train_dataset = baseline_models.prepare_dataset_for_baseline(train_dataset)
@@ -62,32 +65,63 @@ def main():
             test_dataset_with_labels = test_dataset.batch(args.batch_size)
 
         else: # GNN models
-            # For GNN models, we need the graph_spec to build the model.
-            # We also need to remove the 'label' feature from the spec before passing it to the model.
             graph_spec = train_dataset.element_spec
-            features_spec = dict(graph_spec.node_sets_spec['node'].features_spec)
-            del features_spec['label']
-            input_graph_spec = tfgnn.GraphTensorSpec.from_piece_specs(
-                edge_sets_spec=graph_spec.edge_sets_spec,
-                node_sets_spec={'node': tfgnn.NodeSetSpec.from_field_specs(
-                    features_spec=features_spec,
-                    sizes_spec=graph_spec.node_sets_spec['node'].sizes_spec)}
-            )
+            if args.model in ["het_gcn", "het_graph_sage", "het_gat", "het_mpnn"]:
+                features_spec_place = dict(graph_spec.node_sets_spec['place'].features_spec)
+                features_spec_transition = dict(graph_spec.node_sets_spec['transition'].features_spec)
+                del features_spec_place['label']
+                del features_spec_transition['label']
+                input_graph_spec = tfgnn.GraphTensorSpec.from_piece_specs(
+                    edge_sets_spec=graph_spec.edge_sets_spec,
+                    node_sets_spec={
+                        'place': tfgnn.NodeSetSpec.from_field_specs(
+                            features_spec=features_spec_place,
+                            sizes_spec=graph_spec.node_sets_spec['place'].sizes_spec),
+                        'transition': tfgnn.NodeSetSpec.from_field_specs(
+                            features_spec=features_spec_transition,
+                            sizes_spec=graph_spec.node_sets_spec['transition'].sizes_spec)
+                    }
+                )
+
+                def extract_labels_het(graph: tfgnn.GraphTensor):
+                    labels = {
+                        "place": graph.node_sets["place"]["label"].flat_values,
+                        "transition": graph.node_sets["transition"]["label"].flat_values
+                    }
+                    features_place = graph.node_sets['place'].get_features_dict()
+                    features_transition = graph.node_sets['transition'].get_features_dict()
+                    del features_place['label']
+                    del features_transition['label']
+                    graph = graph.replace_features(node_sets={'place': features_place, 'transition': features_transition})
+                    return graph, labels
+
+                train_dataset_with_labels = train_dataset.batch(args.batch_size).map(extract_labels_het)
+                val_dataset_with_labels = val_dataset.batch(args.batch_size).map(extract_labels_het)
+                test_dataset_with_labels = test_dataset.batch(args.batch_size).map(extract_labels_het)
+
+            else: # Homogeneous GNN models
+                features_spec = dict(graph_spec.node_sets_spec['node'].features_spec)
+                del features_spec['label']
+                input_graph_spec = tfgnn.GraphTensorSpec.from_piece_specs(
+                    edge_sets_spec=graph_spec.edge_sets_spec,
+                    node_sets_spec={'node': tfgnn.NodeSetSpec.from_field_specs(
+                        features_spec=features_spec,
+                        sizes_spec=graph_spec.node_sets_spec['node'].sizes_spec)}
+                )
+
+                def extract_labels(graph: tfgnn.GraphTensor):
+                    labels = graph.node_sets['node']['label']
+                    features = graph.node_sets['node'].get_features_dict()
+                    del features['label']
+                    graph = graph.replace_features(node_sets={'node': features})
+                    return graph, labels.values
+
+                train_dataset_with_labels = train_dataset.batch(args.batch_size).map(extract_labels)
+                val_dataset_with_labels = val_dataset.batch(args.batch_size).map(extract_labels)
+                test_dataset_with_labels = test_dataset.batch(args.batch_size).map(extract_labels)
 
             builder_fn = getattr(models, f"build_and_compile_{args.model}")
             model = builder_fn(input_graph_spec, hps)
-
-            def extract_labels(graph: tfgnn.GraphTensor):
-                labels = graph.node_sets['node']['label']
-                features = graph.node_sets['node'].get_features_dict()
-                del features['label']
-                graph = graph.replace_features(node_sets={'node': features})
-                # Return the flat values of the ragged labels tensor to make it dense.
-                return graph, labels.values
-
-            train_dataset_with_labels = train_dataset.batch(args.batch_size).map(extract_labels)
-            val_dataset_with_labels = val_dataset.batch(args.batch_size).map(extract_labels)
-            test_dataset_with_labels = test_dataset.batch(args.batch_size).map(extract_labels)
 
         print(f"Training {args.model.upper()} model for {args.epochs} epochs...")
         model.fit(
@@ -99,10 +133,10 @@ def main():
         print("Training complete.")
 
         print("Evaluating model on the test set...")
-        loss, mse, mae = model.evaluate(test_dataset_with_labels)
-        print(f"Test MAPE (Loss): {loss:.4f}")
-        print(f"Test MSE: {mse:.4f}")
-        print(f"Test MAE: {mae:.4f}")
+        results = model.evaluate(test_dataset_with_labels, return_dict=True)
+        print("Test evaluation results:")
+        for key, value in results.items():
+            print(f"  {key}: {value:.4f}")
 
         print(f"Saving model weights to {model_save_path}.weights.h5...")
         model.save_weights(f"{model_save_path}.weights.h5")

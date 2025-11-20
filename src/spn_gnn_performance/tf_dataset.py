@@ -160,3 +160,115 @@ def split_dataset(dataset: tf.data.Dataset, train_split=0.8, val_split=0.1, shuf
     test_dataset = dataset.skip(train_size + val_size)
 
     return train_dataset, val_dataset, test_dataset
+
+
+def _parse_spn_json_and_build_heterogeneous_graph(json_string: tf.Tensor) -> tfgnn.GraphTensor:
+    """Parses a JSON-L string and constructs a heterogeneous GraphTensor."""
+    data = json.loads(json_string.numpy().decode("utf-8"))
+
+    petri_net = tf.constant(data["petri_net"], dtype=tf.float32)
+    num_places = tf.shape(petri_net)[0]
+    num_transitions = tf.cast(tf.shape(petri_net)[1] // 2, dtype=tf.int32)
+
+    # Node features
+    initial_marking = petri_net[:, -1]
+    firing_rates = tf.constant(data["spn_labda"], dtype=tf.float32)
+
+    place_features = tf.expand_dims(initial_marking, axis=-1)
+    transition_features = tf.expand_dims(firing_rates, axis=-1)
+
+    # Regression labels
+    avg_tokens_per_place = tf.constant(data["spn_allmus"], dtype=tf.float32)
+    avg_firing_rates = tf.constant(data["spn_labda"], dtype=tf.float32)
+    place_labels = tf.expand_dims(avg_tokens_per_place, axis=-1)
+    transition_labels = tf.expand_dims(avg_firing_rates, axis=-1)
+
+    # Edges and edge features
+    pre_conditions = petri_net[:, :num_transitions]
+    post_conditions = petri_net[:, num_transitions:2*num_transitions]
+
+    p_in_idx, t_in_idx = tf.unstack(tf.transpose(tf.where(pre_conditions > 0)))
+    weights_in = tf.gather_nd(pre_conditions, tf.stack([p_in_idx, t_in_idx], axis=1))
+
+    p_out_idx, t_out_idx = tf.unstack(tf.transpose(tf.where(post_conditions > 0)))
+    weights_out = tf.gather_nd(post_conditions, tf.stack([p_out_idx, t_out_idx], axis=1))
+
+    graph = tfgnn.GraphTensor.from_pieces(
+        node_sets={
+            "place": tfgnn.NodeSet.from_fields(
+                sizes=[num_places],
+                features={
+                    "hidden_state": place_features,
+                    "label": place_labels
+                }
+            ),
+            "transition": tfgnn.NodeSet.from_fields(
+                sizes=[num_transitions],
+                features={
+                    "hidden_state": transition_features,
+                    "label": transition_labels
+                }
+            )
+        },
+        edge_sets={
+            "p_to_t": tfgnn.EdgeSet.from_fields(
+                sizes=[tf.shape(p_in_idx)[0]],
+                features={"weight": tf.expand_dims(weights_in, axis=-1)},
+                adjacency=tfgnn.Adjacency.from_indices(
+                    source=("place", tf.cast(p_in_idx, dtype=tf.int32)),
+                    target=("transition", tf.cast(t_in_idx, dtype=tf.int32))
+                )
+            ),
+            "t_to_p": tfgnn.EdgeSet.from_fields(
+                sizes=[tf.shape(p_out_idx)[0]],
+                features={"weight": tf.expand_dims(weights_out, axis=-1)},
+                adjacency=tfgnn.Adjacency.from_indices(
+                    source=("transition", tf.cast(t_out_idx, dtype=tf.int32)),
+                    target=("place", tf.cast(p_out_idx, dtype=tf.int32))
+                )
+            )
+        }
+    )
+    return graph
+
+def load_heterogeneous_dataset(file_path: str) -> tf.data.Dataset:
+    """Creates a tf.data.Dataset from a JSON-L file of SPN data for heterogeneous models."""
+    graph_spec = tfgnn.GraphTensorSpec.from_piece_specs(
+        node_sets_spec={
+            'place': tfgnn.NodeSetSpec.from_field_specs(
+                features_spec={
+                    'hidden_state': tf.TensorSpec(shape=(None, 1), dtype=tf.float32),
+                    'label': tf.TensorSpec(shape=(None, 1), dtype=tf.float32)
+                },
+                sizes_spec=tf.TensorSpec(shape=(1,), dtype=tf.int32)),
+            'transition': tfgnn.NodeSetSpec.from_field_specs(
+                features_spec={
+                    'hidden_state': tf.TensorSpec(shape=(None, 1), dtype=tf.float32),
+                    'label': tf.TensorSpec(shape=(None, 1), dtype=tf.float32)
+                },
+                sizes_spec=tf.TensorSpec(shape=(1,), dtype=tf.int32))
+        },
+        edge_sets_spec={
+            'p_to_t': tfgnn.EdgeSetSpec.from_field_specs(
+                features_spec={'weight': tf.TensorSpec(shape=(None, 1), dtype=tf.float32)},
+                sizes_spec=tf.TensorSpec(shape=(1,), dtype=tf.int32),
+                adjacency_spec=tfgnn.AdjacencySpec.from_incident_node_sets(
+                    'place', 'transition',
+                    index_spec=tf.TensorSpec(shape=(None,), dtype=tf.int32))),
+            't_to_p': tfgnn.EdgeSetSpec.from_field_specs(
+                features_spec={'weight': tf.TensorSpec(shape=(None, 1), dtype=tf.float32)},
+                sizes_spec=tf.TensorSpec(shape=(1,), dtype=tf.int32),
+                adjacency_spec=tfgnn.AdjacencySpec.from_incident_node_sets(
+                    'transition', 'place',
+                    index_spec=tf.TensorSpec(shape=(None,), dtype=tf.int32)))
+        })
+
+    def generator():
+        with open(file_path, 'r') as f:
+            for line in f:
+                yield _parse_spn_json_and_build_heterogeneous_graph(tf.constant(line))
+
+    return tf.data.Dataset.from_generator(
+        generator,
+        output_signature=graph_spec
+    )
