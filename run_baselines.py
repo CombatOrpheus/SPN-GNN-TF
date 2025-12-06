@@ -3,13 +3,13 @@
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
-from spn_gnn_performance.tf_dataset import create_dataset_from_jsonl
-from spn_gnn_performance.baseline_models import SVMModel, MLPModel, prepare_dataset_for_baseline
+from src.spn_gnn_performance.tf_dataset import load_dataset
+from src.spn_gnn_performance.baseline_models import SVMModel, MLPModel, prepare_dataset_for_baseline
 
 def main():
     # Load and prepare the dataset
     file_path = "tests/test_data.jsonl"
-    dataset = create_dataset_from_jsonl(file_path)
+    dataset = load_dataset(file_path)
     padded_dataset = prepare_dataset_for_baseline(dataset)
 
     # Convert the dataset to numpy arrays for scikit-learn
