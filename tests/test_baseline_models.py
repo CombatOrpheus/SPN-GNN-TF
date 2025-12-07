@@ -3,8 +3,8 @@
 import unittest
 import numpy as np
 import tensorflow as tf
-from spn_gnn_performance.tf_dataset import load_dataset
-from spn_gnn_performance.baseline_models import SVMModel, MLPModel, prepare_dataset_for_baseline
+from src.spn_gnn_performance.tf_dataset import load_dataset
+from src.spn_gnn_performance.baseline_models import SVMModel, MLPModel, prepare_dataset_for_baseline
 
 class TestBaselineModels(unittest.TestCase):
 

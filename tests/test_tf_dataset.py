@@ -4,7 +4,7 @@ import unittest
 import os
 import tensorflow as tf
 import tensorflow_gnn as tfgnn
-from spn_gnn_performance.tf_dataset import load_dataset, load_heterogeneous_dataset
+from src.spn_gnn_performance.tf_dataset import load_dataset, load_heterogeneous_dataset
 
 class TestTFDataset(unittest.TestCase):
 

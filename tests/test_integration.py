@@ -30,7 +30,7 @@ class BaseIntegrationTest(unittest.TestCase):
     def run_script(self, command):
         """Run a script using subprocess and handle errors."""
         env = os.environ.copy()
-        env['PYTHONPATH'] = f"{env.get('PYTHONPATH', '')}:src"
+        # Removed PYTHONPATH injection to test without it
         process = subprocess.run(command, capture_output=True, text=True, env=env)
         if process.returncode != 0:
             self.fail(f"Script {' '.join(command)} failed with exit code {process.returncode}\n"
