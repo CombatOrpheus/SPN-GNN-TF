@@ -122,10 +122,16 @@ def load_dataset(file_path: str) -> tf.data.Dataset:
             for line in f:
                 yield _parse_spn_json_and_build_graph(tf.constant(line))
 
-    return tf.data.Dataset.from_generator(
+    # Fast line count to inform TF of cardinality to avoid slow fallbacks during split
+    with open(file_path, 'r') as f:
+        num_lines = sum(1 for _ in f)
+
+    dataset = tf.data.Dataset.from_generator(
         generator,
         output_signature=graph_spec
     )
+
+    return dataset.apply(tf.data.experimental.assert_cardinality(num_lines))
 
 def split_dataset(dataset: tf.data.Dataset, train_split=0.8, val_split=0.1, shuffle=True, seed=42) -> Tuple[tf.data.Dataset, tf.data.Dataset, tf.data.Dataset]:
     """Splits a dataset into training, validation, and test sets.
@@ -147,7 +153,9 @@ def split_dataset(dataset: tf.data.Dataset, train_split=0.8, val_split=0.1, shuf
     dataset_size = dataset.cardinality()
     if dataset_size == tf.data.experimental.UNKNOWN_CARDINALITY:
         # Fallback for datasets with unknown cardinality
-        dataset_size = len(list(dataset))
+        dataset_size = dataset.reduce(tf.constant(0, dtype=tf.int64), lambda x, _: x + 1).numpy()
+    elif isinstance(dataset_size, tf.Tensor):
+        dataset_size = dataset_size.numpy()
 
     train_size = int(train_split * dataset_size)
     val_size = int(val_split * dataset_size)
@@ -268,7 +276,13 @@ def load_heterogeneous_dataset(file_path: str) -> tf.data.Dataset:
             for line in f:
                 yield _parse_spn_json_and_build_heterogeneous_graph(tf.constant(line))
 
-    return tf.data.Dataset.from_generator(
+    # Fast line count to inform TF of cardinality to avoid slow fallbacks during split
+    with open(file_path, 'r') as f:
+        num_lines = sum(1 for _ in f)
+
+    dataset = tf.data.Dataset.from_generator(
         generator,
         output_signature=graph_spec
     )
+
+    return dataset.apply(tf.data.experimental.assert_cardinality(num_lines))
