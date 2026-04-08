@@ -148,3 +148,4 @@ dmypy.json
 # Generated files
 tuning_results/
 evaluation_results/
+reduced_data/
