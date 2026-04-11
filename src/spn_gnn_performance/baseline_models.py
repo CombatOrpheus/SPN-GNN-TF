@@ -24,48 +24,100 @@ def _graph_tensor_to_networkx(graph: tfgnn.GraphTensor) -> nx.DiGraph:
     return g
 
 
-def extract_node_degree(graph: tfgnn.GraphTensor) -> np.ndarray:
+def extract_node_degree(graph: Union[tfgnn.GraphTensor, nx.DiGraph]) -> np.ndarray:
     """Extracts in-degree and out-degree for each node.
 
     Args:
-        graph (tfgnn.GraphTensor): The input graph.
+        graph (Union[tfgnn.GraphTensor, nx.DiGraph]): The input graph.
 
     Returns:
         np.ndarray: A numpy array of shape (num_nodes, 2) with in-degree and
             out-degree for each node.
     """
-    g = _graph_tensor_to_networkx(graph)
+    if isinstance(graph, tfgnn.GraphTensor):
+        g = _graph_tensor_to_networkx(graph)
+    else:
+        g = graph
     in_degree = np.array([d for _, d in g.in_degree()])
     out_degree = np.array([d for _, d in g.out_degree()])
     return np.stack([in_degree, out_degree], axis=1)
 
 
-def extract_pagerank_centrality(graph: tfgnn.GraphTensor) -> np.ndarray:
+def dense_pagerank(g: nx.DiGraph, alpha: float = 0.85, max_iter: int = 100, tol: float = 1.0e-6) -> Dict[int, float]:
+    """Computes PageRank using dense NumPy operations.
+
+    This is significantly faster than nx.pagerank for small graphs because it
+    avoids the overhead of SciPy sparse matrix operations.
+
+    Args:
+        g (nx.DiGraph): The input networkx graph.
+        alpha (float, optional): Damping factor. Defaults to 0.85.
+        max_iter (int, optional): Maximum number of iterations. Defaults to 100.
+        tol (float, optional): Error tolerance. Defaults to 1.0e-6.
+
+    Returns:
+        Dict[int, float]: Dictionary of nodes with PageRank as value.
+    """
+    n = g.number_of_nodes()
+    if n == 0:
+        return {}
+
+    A = nx.to_numpy_array(g)
+    out_degree = A.sum(axis=1)
+
+    # Handle dangling nodes (nodes with 0 out-degree)
+    # They act as if they have an edge to every other node
+    dangling_weights = out_degree == 0
+
+    # Transition matrix P
+    out_degree_safe = out_degree.copy()
+    out_degree_safe[dangling_weights] = 1.0
+    P = A / out_degree_safe[:, np.newaxis]
+
+    x = np.ones(n) / n
+    p = np.ones(n) / n
+
+    for _ in range(max_iter):
+        xlast = x
+        x = alpha * (x @ P + sum(x[dangling_weights]) * p) + (1 - alpha) * p
+        err = np.absolute(x - xlast).sum()
+        if err < n * tol:
+            return dict(zip(g, x))
+    return dict(zip(g, x))
+
+
+def extract_pagerank_centrality(graph: Union[tfgnn.GraphTensor, nx.DiGraph]) -> np.ndarray:
     """Extracts PageRank centrality for each node.
 
     Args:
-        graph (tfgnn.GraphTensor): The input graph.
+        graph (Union[tfgnn.GraphTensor, nx.DiGraph]): The input graph.
 
     Returns:
         np.ndarray: A numpy array of shape (num_nodes,) with the PageRank
             centrality of each node.
     """
-    g = _graph_tensor_to_networkx(graph)
-    pagerank = nx.pagerank(g)
+    if isinstance(graph, tfgnn.GraphTensor):
+        g = _graph_tensor_to_networkx(graph)
+    else:
+        g = graph
+    pagerank = dense_pagerank(g)
     return np.array([pagerank.get(i, 0.0) for i in range(len(g.nodes))])
 
 
-def extract_local_clustering_coefficient(graph: tfgnn.GraphTensor) -> np.ndarray:
+def extract_local_clustering_coefficient(graph: Union[tfgnn.GraphTensor, nx.DiGraph]) -> np.ndarray:
     """Extracts local clustering coefficient for each node.
 
     Args:
-        graph (tfgnn.GraphTensor): The input graph.
+        graph (Union[tfgnn.GraphTensor, nx.DiGraph]): The input graph.
 
     Returns:
         np.ndarray: A numpy array of shape (num_nodes,) with the local
             clustering coefficient of each node.
     """
-    g = _graph_tensor_to_networkx(graph)
+    if isinstance(graph, tfgnn.GraphTensor):
+        g = _graph_tensor_to_networkx(graph)
+    else:
+        g = graph
     # Clustering coefficient is for undirected graphs.
     clustering = nx.clustering(g.to_undirected())
     return np.array([clustering.get(i, 0.0) for i in range(len(g.nodes))])
@@ -86,9 +138,12 @@ def engineer_features(graph: tfgnn.GraphTensor) -> np.ndarray:
     """
     original_features = graph.node_sets["node"]["hidden_state"].numpy()
 
-    degree_features = extract_node_degree(graph)
-    pagerank_features = extract_pagerank_centrality(graph)
-    clustering_features = extract_local_clustering_coefficient(graph)
+    # Pre-compute networkx graph once to avoid redundant conversions
+    g = _graph_tensor_to_networkx(graph)
+
+    degree_features = extract_node_degree(g)
+    pagerank_features = extract_pagerank_centrality(g)
+    clustering_features = extract_local_clustering_coefficient(g)
 
     # Reshape centrality and clustering features to be 2D arrays.
     pagerank_features = np.expand_dims(pagerank_features, axis=1)
