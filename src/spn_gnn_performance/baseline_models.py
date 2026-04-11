@@ -169,11 +169,13 @@ def prepare_dataset_for_baseline(dataset: tf.data.Dataset) -> tf.data.Dataset:
         tf.data.Dataset: A new dataset with engineered and padded features.
     """
     # First pass: find max_nodes without loading everything into memory.
-    max_nodes = 0
-    for graph in dataset:
-        num_nodes = graph.node_sets["node"].sizes[0].numpy()
-        if num_nodes > max_nodes:
-            max_nodes = num_nodes
+    # We use tf.data.Dataset.reduce to find the maximum number of nodes in a scalable way.
+    # This avoids the overhead of iterating through the dataset in Python and calling .numpy() on each element.
+    def _max_nodes_reduce(state, graph):
+        num_nodes = graph.node_sets["node"].sizes[0]
+        return tf.maximum(state, num_nodes)
+
+    max_nodes = dataset.reduce(tf.constant(0, dtype=tf.int32), _max_nodes_reduce).numpy()
 
     # Determine the shape of the engineered features.
     # 3 (original) + 2 (degree) + 1 (pagerank) + 1 (clustering) = 7
