@@ -4,3 +4,6 @@
 ## 2026-04-10 - NetworkX PageRank Performance
 **Learning:** `nx.pagerank` relies on SciPy sparse matrix operations, which introduces significant overhead for many small graphs (e.g., ~30 nodes).
 **Action:** Implemented a `dense_pagerank` using NumPy power iteration which avoids sparse matrix overhead and drastically improves baseline feature extraction speed when caching networkx conversion. Always consider dense ops over sparse when the graphs are small and numerous.
+## 2026-04-11 - Optimize max_nodes calculation in dataset preparation
+**Learning:** In TensorFlow data pipelines, iterating over a `tf.data.Dataset` in standard Python with a `for` loop and calling `.numpy()` on each element is extremely slow.
+**Action:** When finding a maximum value across a dataset (e.g., `max_nodes`), use `dataset.reduce` with TensorFlow operations to calculate it scalably and avoid the Python/TensorFlow boundary overhead.
