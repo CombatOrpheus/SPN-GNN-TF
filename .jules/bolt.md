@@ -1,3 +1,6 @@
 ## 2024-04-08 - TensorFlow Dataset Cardinality Bottleneck
 **Learning:** `tf.data.Dataset.from_generator` returns a dataset with `tf.data.experimental.UNKNOWN_CARDINALITY`. The `split_dataset` method handled this fallback by running `len(list(dataset))`, which consumes the entire generator simply to count items, taking over a minute for moderately sized files and defeating the purpose of a lazy dataset.
 **Action:** When loading datasets from text files with `from_generator`, count the lines natively in Python first, and then explicitly assert the cardinality on the dataset using `ds.apply(tf.data.experimental.assert_cardinality(num_lines))`. This removes the `UNKNOWN_CARDINALITY` and lets splitting logic run instantaneously without exhausting the iterator.
+## 2026-04-10 - NetworkX PageRank Performance
+**Learning:** `nx.pagerank` relies on SciPy sparse matrix operations, which introduces significant overhead for many small graphs (e.g., ~30 nodes).
+**Action:** Implemented a `dense_pagerank` using NumPy power iteration which avoids sparse matrix overhead and drastically improves baseline feature extraction speed when caching networkx conversion. Always consider dense ops over sparse when the graphs are small and numerous.
