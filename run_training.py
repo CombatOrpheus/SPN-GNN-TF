@@ -60,9 +60,9 @@ def main():
             print("Dataset prepared.")
 
             model = models.build_and_compile_mlp(hps)
-            train_dataset_with_labels = train_dataset.batch(args.batch_size)
-            val_dataset_with_labels = val_dataset.batch(args.batch_size)
-            test_dataset_with_labels = test_dataset.batch(args.batch_size)
+            train_dataset_with_labels = train_dataset.batch(args.batch_size).prefetch(tf.data.AUTOTUNE)
+            val_dataset_with_labels = val_dataset.batch(args.batch_size).prefetch(tf.data.AUTOTUNE)
+            test_dataset_with_labels = test_dataset.batch(args.batch_size).prefetch(tf.data.AUTOTUNE)
 
         else: # GNN models
             graph_spec = train_dataset.element_spec
@@ -95,9 +95,9 @@ def main():
                     graph = graph.replace_features(node_sets={'place': features_place, 'transition': features_transition})
                     return graph, labels
 
-                train_dataset_with_labels = train_dataset.batch(args.batch_size).map(extract_labels_het)
-                val_dataset_with_labels = val_dataset.batch(args.batch_size).map(extract_labels_het)
-                test_dataset_with_labels = test_dataset.batch(args.batch_size).map(extract_labels_het)
+                train_dataset_with_labels = train_dataset.batch(args.batch_size).map(extract_labels_het).prefetch(tf.data.AUTOTUNE)
+                val_dataset_with_labels = val_dataset.batch(args.batch_size).map(extract_labels_het).prefetch(tf.data.AUTOTUNE)
+                test_dataset_with_labels = test_dataset.batch(args.batch_size).map(extract_labels_het).prefetch(tf.data.AUTOTUNE)
 
             else: # Homogeneous GNN models
                 features_spec = dict(graph_spec.node_sets_spec['node'].features_spec)
@@ -116,9 +116,9 @@ def main():
                     graph = graph.replace_features(node_sets={'node': features})
                     return graph, labels.values
 
-                train_dataset_with_labels = train_dataset.batch(args.batch_size).map(extract_labels)
-                val_dataset_with_labels = val_dataset.batch(args.batch_size).map(extract_labels)
-                test_dataset_with_labels = test_dataset.batch(args.batch_size).map(extract_labels)
+                train_dataset_with_labels = train_dataset.batch(args.batch_size).map(extract_labels).prefetch(tf.data.AUTOTUNE)
+                val_dataset_with_labels = val_dataset.batch(args.batch_size).map(extract_labels).prefetch(tf.data.AUTOTUNE)
+                test_dataset_with_labels = test_dataset.batch(args.batch_size).map(extract_labels).prefetch(tf.data.AUTOTUNE)
 
             builder_fn = getattr(models, f"build_and_compile_{args.model}")
             model = builder_fn(input_graph_spec, hps)
