@@ -7,3 +7,7 @@
 ## 2026-04-11 - Optimize max_nodes calculation in dataset preparation
 **Learning:** In TensorFlow data pipelines, iterating over a `tf.data.Dataset` in standard Python with a `for` loop and calling `.numpy()` on each element is extremely slow.
 **Action:** When finding a maximum value across a dataset (e.g., `max_nodes`), use `dataset.reduce` with TensorFlow operations to calculate it scalably and avoid the Python/TensorFlow boundary overhead.
+
+## 2026-04-12 - TensorFlow Dataset Prefetching Performance
+**Learning:** tf.data.Dataset pipelines block the main process and training loop if `.prefetch()` is missing, severely affecting performance when generating, loading, or preprocessing batches.
+**Action:** Always append `.prefetch(tf.data.AUTOTUNE)` to the end of any tf.data.Dataset pipeline, especially after `.batch()` and `.map()`, to decouple data production (CPU) from consumption (GPU/training logic) and eliminate dataset-bound bottlenecks.

@@ -90,7 +90,7 @@ def main():
     if is_baseline_model:
         eval_dataset = baseline_models.prepare_dataset_for_baseline(dataset)
     else:
-        eval_dataset = dataset.batch(1)
+        eval_dataset = dataset.batch(1).prefetch(tf.data.AUTOTUNE)
 
     print("Data loaded successfully. Loading model...")
 
