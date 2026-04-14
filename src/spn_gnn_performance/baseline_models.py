@@ -127,7 +127,8 @@ def engineer_features(graph: tfgnn.GraphTensor) -> np.ndarray:
     """Engineers additional features from the graph structure.
 
     Combines the original node features with degree, PageRank, and local
-    clustering coefficient.
+    clustering coefficient. Vectorized pure-NumPy operations are used
+    to avoid the extremely slow NetworkX graph conversions and loops.
 
     Args:
         graph (tfgnn.GraphTensor): The input graph.
@@ -138,15 +139,49 @@ def engineer_features(graph: tfgnn.GraphTensor) -> np.ndarray:
     """
     original_features = graph.node_sets["node"]["hidden_state"].numpy()
 
-    # Pre-compute networkx graph once to avoid redundant conversions
-    g = _graph_tensor_to_networkx(graph)
+    n = graph.node_sets["node"].sizes[0].numpy()
+    sources = graph.edge_sets["edge"].adjacency.source.numpy()
+    targets = graph.edge_sets["edge"].adjacency.target.numpy()
 
-    degree_features = extract_node_degree(g)
-    pagerank_features = extract_pagerank_centrality(g)
-    clustering_features = extract_local_clustering_coefficient(g)
+    # Adjacency matrix construction (equivalent to DiGraph parallel edge dropping)
+    A_bool = np.zeros((n, n), dtype=np.float32)
+    # Check if edges exist to avoid out of bounds in empty graph
+    if len(sources) > 0:
+        A_bool[sources, targets] = 1.0
 
-    # Reshape centrality and clustering features to be 2D arrays.
-    pagerank_features = np.expand_dims(pagerank_features, axis=1)
+    # 1. Degree Features
+    in_degree = A_bool.sum(axis=0)
+    out_degree = A_bool.sum(axis=1)
+    degree_features = np.stack([in_degree, out_degree], axis=1)
+
+    # 2. PageRank Features
+    out_deg = A_bool.sum(axis=1)
+    dangling = out_deg == 0
+    out_deg_safe = out_deg.copy()
+    out_deg_safe[dangling] = 1.0
+    P = A_bool / out_deg_safe[:, np.newaxis]
+
+    x = np.ones(n) / n
+    p = np.ones(n) / n
+    alpha = 0.85
+    for _ in range(100):
+        xlast = x
+        x = alpha * (x @ P + sum(x[dangling]) * p) + (1 - alpha) * p
+        if np.absolute(x - xlast).sum() < n * 1.0e-6:
+            break
+    pagerank_features = np.expand_dims(x, axis=1)
+
+    # 3. Local Clustering Coefficient Features
+    np.fill_diagonal(A_bool, 0)
+    A_undir = np.clip(A_bool + A_bool.T, 0, 1)
+    A3 = np.linalg.matrix_power(A_undir, 3)
+    triangles = np.diag(A3) / 2.0
+    degree = A_undir.sum(axis=1)
+    possible = degree * (degree - 1) / 2.0
+
+    clustering_features = np.zeros(n, dtype=np.float32)
+    mask = possible > 0
+    clustering_features[mask] = triangles[mask] / possible[mask]
     clustering_features = np.expand_dims(clustering_features, axis=1)
 
     return np.hstack([
@@ -285,6 +320,8 @@ class SVMModel(BaseEstimator, RegressorMixin):
         Returns:
             np.ndarray: The predicted values.
         """
+        if tf.is_tensor(X):
+            X = X.numpy()
         X_flattened = X.reshape(-1, X.shape[-1])
         return self.model.predict(X_flattened)
 

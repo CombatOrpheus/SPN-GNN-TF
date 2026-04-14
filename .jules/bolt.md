@@ -11,3 +11,6 @@
 ## 2026-04-12 - TensorFlow Dataset Prefetching Performance
 **Learning:** tf.data.Dataset pipelines block the main process and training loop if `.prefetch()` is missing, severely affecting performance when generating, loading, or preprocessing batches.
 **Action:** Always append `.prefetch(tf.data.AUTOTUNE)` to the end of any tf.data.Dataset pipeline, especially after `.batch()` and `.map()`, to decouple data production (CPU) from consumption (GPU/training logic) and eliminate dataset-bound bottlenecks.
+## 2026-04-14 - Baseline Feature Engineering Bottleneck
+**Learning:** For baseline models, feature engineering relied on converting `tfgnn.GraphTensor` to `nx.DiGraph` to use NetworkX for degree, PageRank, and local clustering coefficient calculations. Although a `dense_pagerank` optimization was added previously, `nx.clustering` and the NetworkX conversion itself still pose a severe bottleneck. Creating a NumPy adjacency matrix directly from TensorFlow GNN indices and implementing pure vectorized NumPy algorithms (e.g. matrix power for clustering) provides a ~3.3x speedup.
+**Action:** When extracting graph structure features for baseline models, completely avoid NetworkX conversion. Use pure NumPy vectorization built directly from GraphTensor edge indices instead.
