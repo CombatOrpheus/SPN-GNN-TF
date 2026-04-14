@@ -43,6 +43,10 @@ def save_plots(y_true, y_pred, is_place, output_dir):
     """
     # Scatter Plot
     plt.figure(figsize=(10, 6))
+    if len(y_true.shape) > 1:
+        y_true = y_true.flatten()
+    if len(y_pred.shape) > 1:
+        y_pred = y_pred.flatten()
     sns.scatterplot(x=y_true, y=y_pred, hue=np.where(is_place, 'Place', 'Transition'), alpha=0.6)
     plt.plot([min(y_true), max(y_true)], [min(y_true), max(y_true)], color='red', linestyle='--')
     plt.title('Predicted vs. True Values')
@@ -55,6 +59,8 @@ def save_plots(y_true, y_pred, is_place, output_dir):
     # Residual Plot
     residuals = y_true - y_pred
     plt.figure(figsize=(10, 6))
+    if len(residuals.shape) > 1:
+        residuals = residuals.flatten()
     sns.scatterplot(x=y_pred, y=residuals, hue=np.where(is_place, 'Place', 'Transition'), alpha=0.6)
     plt.axhline(0, color='red', linestyle='--')
     plt.title('Residual Plot')
