@@ -131,7 +131,11 @@ def load_dataset(file_path: str) -> tf.data.Dataset:
         output_signature=graph_spec
     )
 
-    return dataset.apply(tf.data.experimental.assert_cardinality(num_lines))
+    # Cache to disk before shuffling to prevent OOM errors on large datasets
+    # and to preserve epoch-to-epoch randomness during training.
+    # This prevents the slow JSON-L parsing from running on every epoch.
+    cache_path = f"{file_path}.cache"
+    return dataset.apply(tf.data.experimental.assert_cardinality(num_lines)).cache(cache_path)
 
 def split_dataset(dataset: tf.data.Dataset, train_split=0.8, val_split=0.1, shuffle=True, seed=42) -> Tuple[tf.data.Dataset, tf.data.Dataset, tf.data.Dataset]:
     """Splits a dataset into training, validation, and test sets.
@@ -285,4 +289,8 @@ def load_heterogeneous_dataset(file_path: str) -> tf.data.Dataset:
         output_signature=graph_spec
     )
 
-    return dataset.apply(tf.data.experimental.assert_cardinality(num_lines))
+    # Cache to disk before shuffling to prevent OOM errors on large datasets
+    # and to preserve epoch-to-epoch randomness during training.
+    # This prevents the slow JSON-L parsing from running on every epoch.
+    cache_path = f"{file_path}.cache"
+    return dataset.apply(tf.data.experimental.assert_cardinality(num_lines)).cache(cache_path)
