@@ -131,6 +131,15 @@ def load_dataset(file_path: str) -> tf.data.Dataset:
         output_signature=graph_spec
     )
 
+    # Cache the dataset to disk to avoid re-parsing JSON and rebuilding GraphTensors on every epoch
+    cache_path = file_path + ".cache"
+    dataset = dataset.cache(cache_path)
+
+    import os
+    if not os.path.exists(cache_path + ".index"):
+        for _ in dataset:
+            pass
+
     return dataset.apply(tf.data.experimental.assert_cardinality(num_lines))
 
 def split_dataset(dataset: tf.data.Dataset, train_split=0.8, val_split=0.1, shuffle=True, seed=42) -> Tuple[tf.data.Dataset, tf.data.Dataset, tf.data.Dataset]:
@@ -284,5 +293,14 @@ def load_heterogeneous_dataset(file_path: str) -> tf.data.Dataset:
         generator,
         output_signature=graph_spec
     )
+
+    # Cache the dataset to disk to avoid re-parsing JSON and rebuilding GraphTensors on every epoch
+    cache_path = file_path + ".cache"
+    dataset = dataset.cache(cache_path)
+
+    import os
+    if not os.path.exists(cache_path + ".index"):
+        for _ in dataset:
+            pass
 
     return dataset.apply(tf.data.experimental.assert_cardinality(num_lines))
