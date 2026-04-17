@@ -11,6 +11,20 @@ class TestTFDataset(unittest.TestCase):
     def setUp(self):
         self.test_data_path = "tests/test_data.jsonl"
 
+    def tearDown(self):
+        """Clean up generated cache files to prevent stale tests."""
+        cache_prefix = self.test_data_path + ".cache"
+        if os.path.exists(cache_prefix):
+            os.remove(cache_prefix)
+        if os.path.exists(cache_prefix + ".index"):
+            os.remove(cache_prefix + ".index")
+        for f in os.listdir("tests"):
+            if f.startswith("test_data.jsonl.cache"):
+                try:
+                    os.remove(os.path.join("tests", f))
+                except OSError:
+                    pass
+
     def test_dataset_creation_and_structure(self):
         dataset = load_dataset(self.test_data_path)
 
