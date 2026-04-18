@@ -161,21 +161,29 @@ def engineer_features(graph: tfgnn.GraphTensor) -> np.ndarray:
     out_deg_safe[dangling] = 1.0
     P = A_bool / out_deg_safe[:, np.newaxis]
 
-    x = np.ones(n) / n
-    p = np.ones(n) / n
+    x = np.ones(n, dtype=np.float32) / n
+    p = np.ones(n, dtype=np.float32) / n
     alpha = 0.85
+    alpha_p = (1 - alpha) * p
+    tol = n * 1.0e-6
+
+    # ⚡ Bolt: Use numpy's .sum() instead of python's built-in sum() for performance
+    # Precomputing constants outside loop to avoid redundant operations
     for _ in range(100):
         xlast = x
-        x = alpha * (x @ P + sum(x[dangling]) * p) + (1 - alpha) * p
-        if np.absolute(x - xlast).sum() < n * 1.0e-6:
+        x = alpha * (x @ P + x[dangling].sum() * p) + alpha_p
+        if np.abs(x - xlast).sum() < tol:
             break
     pagerank_features = np.expand_dims(x, axis=1)
 
     # 3. Local Clustering Coefficient Features
     np.fill_diagonal(A_bool, 0)
     A_undir = np.clip(A_bool + A_bool.T, 0, 1)
-    A3 = np.linalg.matrix_power(A_undir, 3)
-    triangles = np.diag(A3) / 2.0
+
+    # ⚡ Bolt: Avoid expensive np.linalg.matrix_power for counting triangles
+    # Using np.dot and np.einsum is much faster for calculating just the diagonal of A^3
+    A2 = np.dot(A_undir, A_undir)
+    triangles = np.einsum('ij,ji->i', A_undir, A2) / 2.0
     degree = A_undir.sum(axis=1)
     possible = degree * (degree - 1) / 2.0
 
