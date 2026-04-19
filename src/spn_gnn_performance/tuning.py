@@ -105,6 +105,23 @@ def build_het_mpnn_model(graph_spec):
     return build_fn
 
 
+def build_het_dual_mpnn_model(graph_spec):
+    """Returns a function that builds a heterogeneous Dual MPNN model for KerasTuner."""
+    def build_fn(hp):
+        message_dim = hp.Int("message_dim", min_value=32, max_value=128, step=32)
+        next_state_dim = hp.Int("next_state_dim", min_value=32, max_value=128, step=32)
+        learning_rate = hp.Float("learning_rate", min_value=1e-4, max_value=1e-2, sampling="log")
+
+        model = models.HetDualMPNNModel(graph_spec, output_dim=1, message_dim=message_dim, next_state_dim=next_state_dim)
+
+        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        loss = tf.keras.losses.MeanAbsolutePercentageError()
+
+        model.compile(optimizer=optimizer, loss=loss, metrics=['mae'])
+        return model
+    return build_fn
+
+
 def build_gat_model(graph_spec):
     """Returns a function that builds a GAT model for KerasTuner.
 

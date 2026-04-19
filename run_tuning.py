@@ -24,16 +24,16 @@ def main():
         dataset_path (str): Path to the JSON-L dataset.
     """
     parser = argparse.ArgumentParser(description="Run hyperparameter tuning for SPN GNN models.")
-    parser.add_argument("model", choices=["gcn", "gat", "mpnn", "svm", "mlp", "het_gcn", "het_graph_sage", "het_gat", "het_mpnn"], help="The model to tune.")
+    parser.add_argument("model", choices=["gcn", "gat", "mpnn", "svm", "mlp", "het_gcn", "het_graph_sage", "het_gat", "het_mpnn", "het_dual_mpnn"], help="The model to tune.")
     parser.add_argument("dataset_path", help="Path to the JSON-L dataset.")
     args = parser.parse_args()
 
     # Create results directory
     os.makedirs("tuning_results", exist_ok=True)
 
-    if args.model in ["gcn", "gat", "mpnn", "mlp", "het_gcn", "het_graph_sage", "het_gat", "het_mpnn"]:
+    if args.model in ["gcn", "gat", "mpnn", "mlp", "het_gcn", "het_graph_sage", "het_gat", "het_mpnn", "het_dual_mpnn"]:
         # Load dataset
-        if args.model in ["het_gcn", "het_graph_sage", "het_gat", "het_mpnn"]:
+        if args.model in ["het_gcn", "het_graph_sage", "het_gat", "het_mpnn", "het_dual_mpnn"]:
             dataset = tf_dataset.load_heterogeneous_dataset(args.dataset_path)
         else:
             dataset = tf_dataset.load_dataset(args.dataset_path)
@@ -58,7 +58,7 @@ def main():
             graph = graph.replace_features(node_sets={'node': features})
             return graph, labels.values
 
-        if args.model in ["het_gcn", "het_graph_sage", "het_gat", "het_mpnn"]:
+        if args.model in ["het_gcn", "het_graph_sage", "het_gat", "het_mpnn", "het_dual_mpnn"]:
             train_dataset_with_labels = train_dataset.batch(32).map(extract_labels_het).prefetch(tf.data.AUTOTUNE)
             val_dataset_with_labels = val_dataset.batch(32).map(extract_labels_het).prefetch(tf.data.AUTOTUNE)
         else:
@@ -69,7 +69,7 @@ def main():
         # For GNN models, we need the graph_spec to build the model.
         graph_spec = train_dataset.element_spec
 
-        if args.model in ["het_gcn", "het_graph_sage", "het_gat", "het_mpnn"]:
+        if args.model in ["het_gcn", "het_graph_sage", "het_gat", "het_mpnn", "het_dual_mpnn"]:
             features_spec_place = dict(graph_spec.node_sets_spec['place'].features_spec)
             features_spec_transition = dict(graph_spec.node_sets_spec['transition'].features_spec)
             del features_spec_place['label']
@@ -109,6 +109,8 @@ def main():
             build_fn = tuning.build_het_gat_model(input_graph_spec)
         elif args.model == "het_mpnn":
             build_fn = tuning.build_het_mpnn_model(input_graph_spec)
+        elif args.model == "het_dual_mpnn":
+            build_fn = tuning.build_het_dual_mpnn_model(input_graph_spec)
         elif args.model == "mlp":
             train_dataset = baseline_models.prepare_dataset_for_baseline(train_dataset)
             val_dataset = baseline_models.prepare_dataset_for_baseline(val_dataset)

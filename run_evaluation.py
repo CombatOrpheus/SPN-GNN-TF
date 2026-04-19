@@ -73,7 +73,7 @@ def save_plots(y_true, y_pred, is_place, output_dir):
 def main():
     """Main function to run the evaluation."""
     parser = argparse.ArgumentParser(description="Run evaluation on a pre-trained model.")
-    parser.add_argument("--model-type", type=str, required=True, choices=["gcn", "gat", "mpnn", "svm", "mlp", "het_gcn", "het_graph_sage", "het_gat", "het_mpnn"], help="The model type to evaluate.")
+    parser.add_argument("--model-type", type=str, required=True, choices=["gcn", "gat", "mpnn", "svm", "mlp", "het_gcn", "het_graph_sage", "het_gat", "het_mpnn", "het_dual_mpnn"], help="The model type to evaluate.")
     parser.add_argument("--model-weights-path", type=str, help="Path to the trained model weights file (.h5).")
     parser.add_argument("--model-path", type=str, help="Path to the trained scikit-learn model file (.joblib).")
     parser.add_argument("--hyperparameters-path", type=str, help="Path to the hyperparameters file for TF models.")
@@ -86,7 +86,7 @@ def main():
 
     # Load and potentially prepare the dataset
     is_baseline_model = args.model_type in ["svm", "mlp"]
-    is_het_gnn = args.model_type in ["het_gcn", "het_graph_sage", "het_gat", "het_mpnn"]
+    is_het_gnn = args.model_type in ["het_gcn", "het_graph_sage", "het_gat", "het_mpnn", "het_dual_mpnn"]
 
     if is_het_gnn:
         dataset = tf_dataset.load_heterogeneous_dataset(args.dataset_path)
@@ -105,7 +105,7 @@ def main():
         if not args.model_path:
             raise ValueError("SVM model requires --model-path.")
         model = joblib.load(args.model_path)
-    elif args.model_type in ["gcn", "gat", "mpnn", "mlp", "het_gcn", "het_graph_sage", "het_gat", "het_mpnn"]:
+    elif args.model_type in ["gcn", "gat", "mpnn", "mlp", "het_gcn", "het_graph_sage", "het_gat", "het_mpnn", "het_dual_mpnn"]:
         if not args.model_weights_path or not args.hyperparameters_path:
             raise ValueError("TensorFlow models require --model-weights-path and --hyperparameters-path.")
         with open(args.hyperparameters_path, 'r') as f:
