@@ -196,6 +196,68 @@ def HetGATModel(graph_spec, units, output_dim, num_heads=4):
     return tf.keras.Model(inputs=input_graph, outputs={"place": place_predictions, "transition": transition_predictions})
 
 
+def HetDualMPNNModel(graph_spec, output_dim, message_dim=64, next_state_dim=64):
+    """Builds a heterogeneous Dual MPNN model."""
+    input_graph = tf.keras.Input(type_spec=graph_spec)
+    graph = input_graph.merge_batch_to_components()
+
+    def set_initial_state_fn(node_set, node_set_name):
+        if node_set_name in ["place", "transition"]:
+            return {"hidden_state": tf.keras.layers.Dense(next_state_dim)(node_set["hidden_state"])}
+        return None
+
+    graph = tfgnn.keras.layers.MapFeatures(
+        node_sets_fn=set_initial_state_fn
+    )(graph)
+
+    graph = tfgnn.keras.layers.GraphUpdate(
+        node_sets={
+            "place": tfgnn.keras.layers.NodeSetUpdate(
+                {"t_to_p": tfgnn.keras.layers.SimpleConv(
+                    message_fn=message_fn_factory(message_dim),
+                    reduce_type="sum",
+                    sender_edge_feature="weight",
+                    receiver_tag=tfgnn.TARGET)},
+                tfgnn.keras.layers.NextStateFromConcat(dense_layer(next_state_dim))
+            ),
+            "transition": tfgnn.keras.layers.NodeSetUpdate(
+                {"p_to_t": tfgnn.keras.layers.SimpleConv(
+                    message_fn=message_fn_factory(message_dim),
+                    reduce_type="mean",
+                    sender_edge_feature="weight",
+                    receiver_tag=tfgnn.TARGET)},
+                tfgnn.keras.layers.NextStateFromConcat(dense_layer(next_state_dim))
+            )
+        }
+    )(graph)
+
+    graph = tfgnn.keras.layers.GraphUpdate(
+        node_sets={
+            "place": tfgnn.keras.layers.NodeSetUpdate(
+                {"t_to_p": tfgnn.keras.layers.SimpleConv(
+                    message_fn=message_fn_factory(message_dim),
+                    reduce_type="sum",
+                    sender_edge_feature="weight",
+                    receiver_tag=tfgnn.TARGET)},
+                tfgnn.keras.layers.NextStateFromConcat(dense_layer(next_state_dim))
+            ),
+            "transition": tfgnn.keras.layers.NodeSetUpdate(
+                {"p_to_t": tfgnn.keras.layers.SimpleConv(
+                    message_fn=message_fn_factory(message_dim),
+                    reduce_type="mean",
+                    sender_edge_feature="weight",
+                    receiver_tag=tfgnn.TARGET)},
+                tfgnn.keras.layers.NextStateFromConcat(dense_layer(next_state_dim))
+            )
+        }
+    )(graph)
+
+    place_predictions = tf.keras.layers.Dense(output_dim)(graph.node_sets["place"]["hidden_state"])
+    transition_predictions = tf.keras.layers.Dense(output_dim)(graph.node_sets["transition"]["hidden_state"])
+
+    return tf.keras.Model(inputs=input_graph, outputs={"place": place_predictions, "transition": transition_predictions})
+
+
 def HetMPNNModel(graph_spec, output_dim, message_dim=64, next_state_dim=64):
     """Builds a heterogeneous MPNN model using tfgnn.models.vanilla_mpnn."""
     input_graph = tf.keras.Input(type_spec=graph_spec)
@@ -259,6 +321,14 @@ def build_and_compile_het_gat(graph_spec, hps):
 def build_and_compile_het_mpnn(graph_spec, hps):
     """Builds and compiles a heterogeneous MPNN model from hyperparameters."""
     model = HetMPNNModel(graph_spec, output_dim=1, message_dim=hps['message_dim'], next_state_dim=hps['next_state_dim'])
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
+                  loss=tf.keras.losses.MeanAbsolutePercentageError(),
+                  metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])
+    return model
+
+def build_and_compile_het_dual_mpnn(graph_spec, hps):
+    """Builds and compiles a heterogeneous Dual MPNN model from hyperparameters."""
+    model = HetDualMPNNModel(graph_spec, output_dim=1, message_dim=hps['message_dim'], next_state_dim=hps['next_state_dim'])
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hps['learning_rate']),
                   loss=tf.keras.losses.MeanAbsolutePercentageError(),
                   metrics=[tf.keras.metrics.MeanSquaredError(), tf.keras.metrics.MeanAbsoluteError()])

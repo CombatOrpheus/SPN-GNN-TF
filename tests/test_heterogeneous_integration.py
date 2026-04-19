@@ -51,6 +51,9 @@ class TestHetGCNIntegration(BaseIntegrationTest):
     def test_het_mpnn_workflow(self):
         self.run_workflow("het_mpnn")
 
+    def test_het_dual_mpnn_workflow(self):
+        self.run_workflow("het_dual_mpnn")
+
     def run_workflow(self, model_name):
         # 1. Run tuning
         self.run_script(["python", "run_tuning.py", model_name, self.DATASET_PATH])

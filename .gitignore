@@ -149,3 +149,4 @@ dmypy.json
 tuning_results/
 evaluation_results/
 reduced_data/
+*.cache*
