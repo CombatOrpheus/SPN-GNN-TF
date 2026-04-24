@@ -79,7 +79,7 @@ def dense_pagerank(g: nx.DiGraph, alpha: float = 0.85, max_iter: int = 100, tol:
 
     for _ in range(max_iter):
         xlast = x
-        x = alpha * (x @ P + sum(x[dangling_weights]) * p) + (1 - alpha) * p
+        x = alpha * (x @ P + x[dangling_weights].sum() * p) + (1 - alpha) * p
         err = np.absolute(x - xlast).sum()
         if err < n * tol:
             return dict(zip(g, x))
