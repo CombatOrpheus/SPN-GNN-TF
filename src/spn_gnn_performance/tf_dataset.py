@@ -90,6 +90,25 @@ def _parse_spn_json_and_build_graph(json_string: tf.Tensor) -> tfgnn.GraphTensor
 
     return graph
 
+def _fast_line_count(file_path: str) -> int:
+    """Counts the number of lines in a file quickly using block reads.
+
+    This avoids slow line-by-line iteration when setting dataset cardinality.
+    """
+    with open(file_path, 'rb') as f:
+        lines = 0
+        buf_size = 1024 * 1024
+        read_f = f.read
+        buf = read_f(buf_size)
+        last_buf = b''
+        while buf:
+            lines += buf.count(b'\n')
+            last_buf = buf
+            buf = read_f(buf_size)
+        if last_buf and not last_buf.endswith(b'\n'):
+            lines += 1
+    return lines
+
 def load_dataset(file_path: str) -> tf.data.Dataset:
     """Creates a tf.data.Dataset from a JSON-L file of SPN data.
 
@@ -123,8 +142,7 @@ def load_dataset(file_path: str) -> tf.data.Dataset:
                 yield _parse_spn_json_and_build_graph(tf.constant(line))
 
     # Fast line count to inform TF of cardinality to avoid slow fallbacks during split
-    with open(file_path, 'r') as f:
-        num_lines = sum(1 for _ in f)
+    num_lines = _fast_line_count(file_path)
 
     dataset = tf.data.Dataset.from_generator(
         generator,
@@ -286,8 +304,7 @@ def load_heterogeneous_dataset(file_path: str) -> tf.data.Dataset:
                 yield _parse_spn_json_and_build_heterogeneous_graph(tf.constant(line))
 
     # Fast line count to inform TF of cardinality to avoid slow fallbacks during split
-    with open(file_path, 'r') as f:
-        num_lines = sum(1 for _ in f)
+    num_lines = _fast_line_count(file_path)
 
     dataset = tf.data.Dataset.from_generator(
         generator,
