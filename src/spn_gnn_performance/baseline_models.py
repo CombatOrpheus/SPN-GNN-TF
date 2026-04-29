@@ -261,7 +261,7 @@ def prepare_dataset_for_baseline(dataset: tf.data.Dataset) -> tf.data.Dataset:
         labels.set_shape([max_nodes, 1])
         return features, labels
 
-    return dataset.map(_map_fn).prefetch(tf.data.AUTOTUNE)
+    return dataset.map(_map_fn, num_parallel_calls=tf.data.AUTOTUNE).prefetch(tf.data.AUTOTUNE)
 
 
 from sklearn.svm import SVR
