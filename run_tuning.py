@@ -58,12 +58,13 @@ def main():
             graph = graph.replace_features(node_sets={'node': features})
             return graph, labels.values
 
+        # ⚡ Bolt: Added num_parallel_calls=tf.data.AUTOTUNE to dynamically parallelize dataset batch mappings
         if args.model in ["het_gcn", "het_graph_sage", "het_gat", "het_mpnn", "het_dual_mpnn"]:
-            train_dataset_with_labels = train_dataset.batch(32).map(extract_labels_het).prefetch(tf.data.AUTOTUNE)
-            val_dataset_with_labels = val_dataset.batch(32).map(extract_labels_het).prefetch(tf.data.AUTOTUNE)
+            train_dataset_with_labels = train_dataset.batch(32).map(extract_labels_het, num_parallel_calls=tf.data.AUTOTUNE).prefetch(tf.data.AUTOTUNE)
+            val_dataset_with_labels = val_dataset.batch(32).map(extract_labels_het, num_parallel_calls=tf.data.AUTOTUNE).prefetch(tf.data.AUTOTUNE)
         else:
-            train_dataset_with_labels = train_dataset.batch(32).map(extract_labels).prefetch(tf.data.AUTOTUNE)
-            val_dataset_with_labels = val_dataset.batch(32).map(extract_labels).prefetch(tf.data.AUTOTUNE)
+            train_dataset_with_labels = train_dataset.batch(32).map(extract_labels, num_parallel_calls=tf.data.AUTOTUNE).prefetch(tf.data.AUTOTUNE)
+            val_dataset_with_labels = val_dataset.batch(32).map(extract_labels, num_parallel_calls=tf.data.AUTOTUNE).prefetch(tf.data.AUTOTUNE)
 
 
         # For GNN models, we need the graph_spec to build the model.
