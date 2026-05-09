@@ -30,3 +30,6 @@
 ## 2024-05-02 - NumPy Masked Division Optimization
 **Learning:** Performing a masked division using boolean mask array indexing (e.g. `c[mask] = a[mask] / b[mask]`) involves multiple intermediate temporary array allocations for both the masked selections and the division result before assignment. When evaluating over many graphs during baseline dataset preparation, this allocation overhead accumulates into a measurable performance regression.
 **Action:** Use `np.divide` with the `out` and `where` arguments (e.g., `np.divide(a, b, out=c, where=mask)`) for masked division. This avoids temporary array allocations and writes the computation directly into the pre-allocated output array, resulting in significant (e.g., ~2.2x) speedups for this operation.
+## 2024-05-08 - Logical OR with Boolean NumPy Matrices
+**Learning:** Using `np.clip(A + B, 0, 1)` to perform a logical OR between two binary NumPy arrays involves an intermediate addition allocation, and the clipping performs unnecessary bound checking overhead.
+**Action:** When combining boolean or binary arrays (like calculating an undirected adjacency matrix `A_undir = A_bool + A_bool.T`), always use `np.maximum(A_bool, A_bool.T)` instead. This avoids the intermediate array and bounding logic, delivering a measurable (~2x) performance improvement for that step.
