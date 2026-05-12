@@ -5,7 +5,7 @@ import tensorflow as tf
 import tensorflow_gnn as tfgnn
 from typing import Tuple
 
-def _parse_spn_json_and_build_graph(json_string: tf.Tensor) -> tfgnn.GraphTensor:
+def _parse_spn_json_and_build_graph(json_string: str) -> tfgnn.GraphTensor:
     """Parses a JSON-L string and constructs a GraphTensor.
 
     Extracts SPN data, node features, labels, and edge information to build a
@@ -13,12 +13,13 @@ def _parse_spn_json_and_build_graph(json_string: tf.Tensor) -> tfgnn.GraphTensor
     'label' feature in the node set.
 
     Args:
-        json_string (tf.Tensor): A scalar tensor containing the JSON-L string.
+        json_string (str): A string containing the JSON-L data.
 
     Returns:
         tfgnn.GraphTensor: The constructed GraphTensor.
     """
-    data = json.loads(json_string.numpy().decode("utf-8"))
+    # ⚡ Bolt: Parse python string directly to avoid extremely slow tf.Tensor -> string decoding overhead inside tight loops
+    data = json.loads(json_string)
 
     petri_net = tf.constant(data["petri_net"], dtype=tf.float32)
     num_places = tf.shape(petri_net)[0]
@@ -139,7 +140,8 @@ def load_dataset(file_path: str) -> tf.data.Dataset:
     def generator():
         with open(file_path, 'r') as f:
             for line in f:
-                yield _parse_spn_json_and_build_graph(tf.constant(line))
+                # ⚡ Bolt: Yield python strings directly into the dataset instead of wrapping them in tf.constant
+                yield _parse_spn_json_and_build_graph(line)
 
     # Fast line count to inform TF of cardinality to avoid slow fallbacks during split
     num_lines = _fast_line_count(file_path)
@@ -197,9 +199,10 @@ def split_dataset(dataset: tf.data.Dataset, train_split=0.8, val_split=0.1, shuf
     return train_dataset, val_dataset, test_dataset
 
 
-def _parse_spn_json_and_build_heterogeneous_graph(json_string: tf.Tensor) -> tfgnn.GraphTensor:
+def _parse_spn_json_and_build_heterogeneous_graph(json_string: str) -> tfgnn.GraphTensor:
     """Parses a JSON-L string and constructs a heterogeneous GraphTensor."""
-    data = json.loads(json_string.numpy().decode("utf-8"))
+    # ⚡ Bolt: Parse python string directly to avoid extremely slow tf.Tensor -> string decoding overhead inside tight loops
+    data = json.loads(json_string)
 
     petri_net = tf.constant(data["petri_net"], dtype=tf.float32)
     num_places = tf.shape(petri_net)[0]
@@ -301,7 +304,8 @@ def load_heterogeneous_dataset(file_path: str) -> tf.data.Dataset:
     def generator():
         with open(file_path, 'r') as f:
             for line in f:
-                yield _parse_spn_json_and_build_heterogeneous_graph(tf.constant(line))
+                # ⚡ Bolt: Yield python strings directly into the dataset instead of wrapping them in tf.constant
+                yield _parse_spn_json_and_build_heterogeneous_graph(line)
 
     # Fast line count to inform TF of cardinality to avoid slow fallbacks during split
     num_lines = _fast_line_count(file_path)

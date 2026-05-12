@@ -33,3 +33,6 @@
 ## 2024-05-08 - Logical OR with Boolean NumPy Matrices
 **Learning:** Using `np.clip(A + B, 0, 1)` to perform a logical OR between two binary NumPy arrays involves an intermediate addition allocation, and the clipping performs unnecessary bound checking overhead.
 **Action:** When combining boolean or binary arrays (like calculating an undirected adjacency matrix `A_undir = A_bool + A_bool.T`), always use `np.maximum(A_bool, A_bool.T)` instead. This avoids the intermediate array and bounding logic, delivering a measurable (~2x) performance improvement for that step.
+## 2026-05-11 - Optimize string passing to TF Dataset generators
+**Learning:** Passing a python string through `tf.constant(line)` out of a python generator specifically so that a downstream parsing function can execute `.numpy().decode('utf-8')` introduces an extremely severe performance penalty. This back-and-forth between python string -> TF tensor -> python string per JSON line causes massive data ingestion bottlenecks inside `tf.data.Dataset.from_generator`.
+**Action:** When a dataset yields elements from pure Python text files, keep the lines as native python strings inside the generator. Pass them directly to standard python JSON loaders to avoid `tf.Tensor` serialization and string decoding overhead in tight dataset iteration loops.
