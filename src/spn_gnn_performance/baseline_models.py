@@ -187,9 +187,9 @@ def engineer_features(graph: tfgnn.GraphTensor) -> np.ndarray:
     A_undir = np.maximum(A_bool, A_bool.T)
 
     # ⚡ Bolt: Avoid expensive np.linalg.matrix_power for counting triangles
-    # Using np.dot and np.einsum is much faster for calculating just the diagonal of A^3
+    # Using np.dot and (A * A2).sum(axis=1) is much faster for calculating just the diagonal of A^3
     A2 = np.dot(A_undir, A_undir)
-    triangles = np.einsum('ij,ji->i', A_undir, A2) / 2.0
+    triangles = (A_undir * A2).sum(axis=1) / 2.0
     degree = A_undir.sum(axis=1)
     possible = degree * (degree - 1) / 2.0
 
