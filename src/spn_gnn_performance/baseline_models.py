@@ -146,26 +146,31 @@ def engineer_features(graph: tfgnn.GraphTensor) -> np.ndarray:
     sources = graph.edge_sets["edge"].adjacency.source.numpy()
     targets = graph.edge_sets["edge"].adjacency.target.numpy()
 
+    # ⚡ Bolt: Dynamically determine original feature dimension for safe broadcasting
+    num_feats = original_features.shape[1]
+
+    # ⚡ Bolt: Pre-allocate output array to avoid massive overhead from dynamically shaping and hstacking 4 arrays
+    out = np.empty((n, num_feats + 4), dtype=np.float32)
+    out[:, :num_feats] = original_features
+
     # Adjacency matrix construction (equivalent to DiGraph parallel edge dropping)
     A_bool = np.zeros((n, n), dtype=np.float32)
     # Check if edges exist to avoid out of bounds in empty graph
     if len(sources) > 0:
         A_bool[sources, targets] = 1.0
 
-    # 1. Degree Features
-    in_degree = A_bool.sum(axis=0)
-    out_degree = A_bool.sum(axis=1)
-    degree_features = np.stack([in_degree, out_degree], axis=1)
+    # 1. Degree Features - write directly to output array to avoid intermediate allocation
+    A_bool.sum(axis=0, out=out[:, num_feats])
+    out_degree = A_bool.sum(axis=1, out=out[:, num_feats + 1])
 
     # 2. PageRank Features
-    out_deg = A_bool.sum(axis=1)
-    dangling = out_deg == 0
-    out_deg_safe = out_deg.copy()
-    out_deg_safe[dangling] = 1.0
-    P = A_bool / out_deg_safe[:, np.newaxis]
+    dangling = out_degree == 0
 
-    x = np.ones(n, dtype=np.float32) / n
-    p = np.ones(n, dtype=np.float32) / n
+    # ⚡ Bolt: Use np.maximum(out_degree, 1.0) inline instead of copying and assigning to out_deg_safe[dangling]
+    P = A_bool / np.maximum(out_degree, 1.0)[:, np.newaxis]
+
+    x = np.full(n, 1.0 / n, dtype=np.float32)
+    p = np.full(n, 1.0 / n, dtype=np.float32)
     alpha = 0.85
     alpha_p = (1 - alpha) * p
     tol = n * 1.0e-6
@@ -174,10 +179,11 @@ def engineer_features(graph: tfgnn.GraphTensor) -> np.ndarray:
     # Precomputing constants outside loop to avoid redundant operations
     for _ in range(100):
         xlast = x
-        x = alpha * (x @ P + x[dangling].sum() * p) + alpha_p
+        x = alpha * (np.dot(x, P) + x[dangling].sum() * p) + alpha_p
         if np.abs(x - xlast).sum() < tol:
             break
-    pagerank_features = np.expand_dims(x, axis=1)
+
+    out[:, num_feats + 2] = x
 
     # 3. Local Clustering Coefficient Features
     np.fill_diagonal(A_bool, 0)
@@ -189,23 +195,17 @@ def engineer_features(graph: tfgnn.GraphTensor) -> np.ndarray:
     # ⚡ Bolt: Avoid expensive np.linalg.matrix_power for counting triangles
     # Using np.dot and (A * A2).sum(axis=1) is much faster for calculating just the diagonal of A^3
     A2 = np.dot(A_undir, A_undir)
-    triangles = (A_undir * A2).sum(axis=1) / 2.0
+    triangles = (A_undir * A2).sum(axis=1) * 0.5
     degree = A_undir.sum(axis=1)
-    possible = degree * (degree - 1) / 2.0
+    possible = degree * (degree - 1) * 0.5
 
-    clustering_features = np.zeros(n, dtype=np.float32)
+    out[:, num_feats + 3] = 0.0
     mask = possible > 0
     # ⚡ Bolt: Use np.divide with out and where arguments to avoid temporary array allocation
     # during masked division, yielding ~2.2x speedup over boolean mask indexing.
-    np.divide(triangles, possible, out=clustering_features, where=mask)
-    clustering_features = np.expand_dims(clustering_features, axis=1)
+    np.divide(triangles, possible, out=out[:, num_feats + 3], where=mask)
 
-    return np.hstack([
-        original_features,
-        degree_features,
-        pagerank_features,
-        clustering_features
-    ])
+    return out
 
 def prepare_dataset_for_baseline(dataset: tf.data.Dataset) -> tf.data.Dataset:
     """Prepares a dataset for baseline models.
