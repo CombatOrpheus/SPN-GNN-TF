@@ -190,9 +190,15 @@ def split_dataset(dataset: tf.data.Dataset, train_split=0.8, val_split=0.1, shuf
     val_size = int(val_split * dataset_size)
 
     if shuffle:
-        dataset = dataset.shuffle(buffer_size=dataset_size, seed=seed)
+        # ⚡ Bolt: Set reshuffle_each_iteration=False to prevent data leakage across epochs.
+        # Otherwise, skip() and take() will return different elements on every iteration.
+        dataset = dataset.shuffle(buffer_size=dataset_size, seed=seed, reshuffle_each_iteration=False)
 
     train_dataset = dataset.take(train_size)
+    if shuffle:
+        # ⚡ Bolt: Re-apply dynamic shuffle specifically to the training dataset to ensure
+        # stochastic gradient descent receives data in a random order every epoch.
+        train_dataset = train_dataset.shuffle(buffer_size=train_size, seed=seed, reshuffle_each_iteration=True)
     val_dataset = dataset.skip(train_size).take(val_size)
     test_dataset = dataset.skip(train_size + val_size)
 
