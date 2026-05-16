@@ -52,17 +52,20 @@ def _parse_spn_json_and_build_graph(json_string: str) -> tfgnn.GraphTensor:
     pre_conditions = petri_net[:, :num_transitions]
     post_conditions = petri_net[:, num_transitions:2*num_transitions]
 
-    p_in_idx, t_in_idx = tf.unstack(tf.transpose(tf.where(pre_conditions > 0)))
+    # ⚡ Bolt: Use indices from tf.where directly in tf.gather_nd to avoid redundant matrix transposition and restacking overhead
+    in_indices = tf.where(pre_conditions > 0)
+    p_in_idx, t_in_idx = tf.unstack(in_indices, axis=1)
     src_in = p_in_idx
     tgt_in = t_in_idx + tf.cast(num_places, dtype=tf.int64)
     edges_in = tf.stack([src_in, tgt_in], axis=1)
-    weights_in = tf.gather_nd(pre_conditions, tf.stack([p_in_idx, t_in_idx], axis=1))
+    weights_in = tf.gather_nd(pre_conditions, in_indices)
 
-    p_out_idx, t_out_idx = tf.unstack(tf.transpose(tf.where(post_conditions > 0)))
+    out_indices = tf.where(post_conditions > 0)
+    p_out_idx, t_out_idx = tf.unstack(out_indices, axis=1)
     src_out = t_out_idx + tf.cast(num_places, dtype=tf.int64)
     tgt_out = p_out_idx
     edges_out = tf.stack([src_out, tgt_out], axis=1)
-    weights_out = tf.gather_nd(post_conditions, tf.stack([p_out_idx, t_out_idx], axis=1))
+    weights_out = tf.gather_nd(post_conditions, out_indices)
 
     edge_pairs = tf.concat([edges_in, edges_out], axis=0)
     edge_features = tf.concat([weights_in, weights_out], axis=0)
@@ -231,11 +234,14 @@ def _parse_spn_json_and_build_heterogeneous_graph(json_string: str) -> tfgnn.Gra
     pre_conditions = petri_net[:, :num_transitions]
     post_conditions = petri_net[:, num_transitions:2*num_transitions]
 
-    p_in_idx, t_in_idx = tf.unstack(tf.transpose(tf.where(pre_conditions > 0)))
-    weights_in = tf.gather_nd(pre_conditions, tf.stack([p_in_idx, t_in_idx], axis=1))
+    # ⚡ Bolt: Use indices from tf.where directly in tf.gather_nd to avoid redundant matrix transposition and restacking overhead
+    in_indices = tf.where(pre_conditions > 0)
+    p_in_idx, t_in_idx = tf.unstack(in_indices, axis=1)
+    weights_in = tf.gather_nd(pre_conditions, in_indices)
 
-    p_out_idx, t_out_idx = tf.unstack(tf.transpose(tf.where(post_conditions > 0)))
-    weights_out = tf.gather_nd(post_conditions, tf.stack([p_out_idx, t_out_idx], axis=1))
+    out_indices = tf.where(post_conditions > 0)
+    p_out_idx, t_out_idx = tf.unstack(out_indices, axis=1)
+    weights_out = tf.gather_nd(post_conditions, out_indices)
 
     graph = tfgnn.GraphTensor.from_pieces(
         node_sets={

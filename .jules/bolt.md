@@ -45,3 +45,6 @@
 ## 2026-05-14 - TensorFlow Dataset Split Leak and Shuffle
 **Learning:** Setting `reshuffle_each_iteration=False` on the base dataset before splitting prevents test/val data leakage across epochs. However, failing to re-apply `.shuffle(reshuffle_each_iteration=True)` specifically to the `train_dataset` destroys SGD randomness, forcing the model to see the same data order every epoch.
 **Action:** When splitting `tf.data.Dataset`, apply a stable shuffle first, split via `take`/`skip`, and then apply a dynamic shuffle strictly to the resulting `train_dataset`.
+## 2024-05-16 - Optimize tf.where -> gather_nd indexing in TensorFlow
+**Learning:** When extracting coordinates from a sparse boolean mask in TensorFlow (e.g., `indices = tf.where(mask)`), taking those indices, unstacking them, transposing them, and immediately re-stacking them to use with `tf.gather_nd` is a massive anti-pattern that creates redundant matrix transpositions and slows down data pipelines.
+**Action:** Always save the result of `indices = tf.where(mask)` directly and use it directly in `tf.gather_nd`. If the separated indices are still needed for edge definitions, unstack the `indices` tensor directly along the column axis `(p, t = tf.unstack(indices, axis=1))` rather than unstacking the transpose.
