@@ -142,7 +142,8 @@ def engineer_features(graph: tfgnn.GraphTensor) -> np.ndarray:
     """
     original_features = graph.node_sets["node"]["hidden_state"].numpy()
 
-    n = graph.node_sets["node"].sizes[0].numpy()
+    # ⚡ Bolt: Slicing the numpy array is faster than slicing the TF Tensor then calling .numpy()
+    n = graph.node_sets["node"].sizes.numpy()[0]
     sources = graph.edge_sets["edge"].adjacency.source.numpy()
     targets = graph.edge_sets["edge"].adjacency.target.numpy()
 
@@ -193,9 +194,9 @@ def engineer_features(graph: tfgnn.GraphTensor) -> np.ndarray:
     A_undir = np.maximum(A_bool, A_bool.T)
 
     # ⚡ Bolt: Avoid expensive np.linalg.matrix_power for counting triangles
-    # Using np.dot and (A * A2).sum(axis=1) is much faster for calculating just the diagonal of A^3
+    # Using np.dot and np.einsum is much faster for calculating just the diagonal of A^3
     A2 = np.dot(A_undir, A_undir)
-    triangles = (A_undir * A2).sum(axis=1) * 0.5
+    triangles = np.einsum('ij,ij->i', A_undir, A2) * 0.5
     degree = A_undir.sum(axis=1)
     possible = degree * (degree - 1) * 0.5
 
@@ -238,21 +239,18 @@ def prepare_dataset_for_baseline(dataset: tf.data.Dataset) -> tf.data.Dataset:
         label_numpy = label.numpy()
 
         num_nodes = engineered_features.shape[0]
-        pad_width = max_nodes - num_nodes
+        num_feats = engineered_features.shape[1]
+        num_labels = label_numpy.shape[1]
 
-        padded_features = np.pad(
-            engineered_features,
-            ((0, pad_width), (0, 0)),
-            'constant',
-            constant_values=-1
-        ).astype(np.float32)
+        # ⚡ Bolt: Fast manual padding with np.empty and slicing avoids the
+        # dynamic array allocations and bounds checking overhead of np.pad
+        padded_features = np.empty((max_nodes, num_feats), dtype=np.float32)
+        padded_features[:num_nodes] = engineered_features
+        padded_features[num_nodes:] = -1
 
-        padded_label = np.pad(
-            label_numpy,
-            ((0, pad_width), (0, 0)),
-            'constant',
-            constant_values=-1
-        ).astype(np.float32)
+        padded_label = np.empty((max_nodes, num_labels), dtype=np.float32)
+        padded_label[:num_nodes] = label_numpy
+        padded_label[num_nodes:] = -1
 
         return padded_features, padded_label
 
