@@ -21,54 +21,45 @@ def _parse_spn_json_and_build_graph(json_string: str) -> tfgnn.GraphTensor:
     # ⚡ Bolt: Parse python string directly to avoid extremely slow tf.Tensor -> string decoding overhead inside tight loops
     data = json.loads(json_string)
 
-    petri_net = tf.constant(data["petri_net"], dtype=tf.float32)
-    num_places = tf.shape(petri_net)[0]
-    num_transitions = tf.cast(tf.shape(petri_net)[1] // 2, dtype=tf.int32)
+    petri_net = data["petri_net"]
+    num_places = len(petri_net)
+    num_transitions = len(petri_net[0]) // 2 if num_places > 0 else 0
 
-    # Node features
-    initial_marking = petri_net[:, -1]
-    firing_rates = tf.constant(data["spn_labda"], dtype=tf.float32)
+    # Extract initial marking and firing rates
+    initial_marking = [row[-1] for row in petri_net]
+    firing_rates = data["spn_labda"]
 
-    place_features = tf.stack([
-        tf.ones(num_places),
-        initial_marking,
-        tf.zeros(num_places)
-    ], axis=1)
+    # ⚡ Bolt: Build features purely in Python to avoid overhead of tf.stack and tf.concat on many small vectors
+    places = [[1.0, float(im), 0.0] for im in initial_marking]
+    transitions = [[0.0, 0.0, float(fr)] for fr in firing_rates]
+    node_features = tf.constant(places + transitions, dtype=tf.float32)
 
-    transition_features = tf.stack([
-        tf.zeros(num_transitions),
-        tf.zeros(num_transitions),
-        firing_rates
-    ], axis=1)
+    # ⚡ Bolt: Python concatenation instead of tf.concat for labels
+    labels = tf.constant(data["spn_allmus"] + firing_rates, dtype=tf.float32)
 
-    node_features = tf.concat([place_features, transition_features], axis=0)
+    # ⚡ Bolt: Parse edges purely in Python to avoid slow tf.where / tf.unstack inside tight map loops
+    edges_src = []
+    edges_tgt = []
+    edge_weights = []
 
-    # Regression labels
-    avg_tokens_per_place = tf.constant(data["spn_allmus"], dtype=tf.float32)
-    avg_firing_rates = tf.constant(data["spn_labda"], dtype=tf.float32)
-    labels = tf.concat([avg_tokens_per_place, avg_firing_rates], axis=0)
+    for p in range(num_places):
+        # Pre-conditions
+        for t in range(num_transitions):
+            w = petri_net[p][t]
+            if w > 0:
+                edges_src.append(p)
+                edges_tgt.append(t + num_places)
+                edge_weights.append(w)
 
-    # Edges and edge features
-    pre_conditions = petri_net[:, :num_transitions]
-    post_conditions = petri_net[:, num_transitions:2*num_transitions]
+        # Post-conditions
+        for t in range(num_transitions):
+            w = petri_net[p][t + num_transitions]
+            if w > 0:
+                edges_src.append(t + num_places)
+                edges_tgt.append(p)
+                edge_weights.append(w)
 
-    # ⚡ Bolt: Use indices from tf.where directly in tf.gather_nd to avoid redundant matrix transposition and restacking overhead
-    in_indices = tf.where(pre_conditions > 0)
-    p_in_idx, t_in_idx = tf.unstack(in_indices, axis=1)
-    src_in = p_in_idx
-    tgt_in = t_in_idx + tf.cast(num_places, dtype=tf.int64)
-    edges_in = tf.stack([src_in, tgt_in], axis=1)
-    weights_in = tf.gather_nd(pre_conditions, in_indices)
-
-    out_indices = tf.where(post_conditions > 0)
-    p_out_idx, t_out_idx = tf.unstack(out_indices, axis=1)
-    src_out = t_out_idx + tf.cast(num_places, dtype=tf.int64)
-    tgt_out = p_out_idx
-    edges_out = tf.stack([src_out, tgt_out], axis=1)
-    weights_out = tf.gather_nd(post_conditions, out_indices)
-
-    edge_pairs = tf.concat([edges_in, edges_out], axis=0)
-    edge_features = tf.concat([weights_in, weights_out], axis=0)
+    num_edges = len(edges_src)
 
     graph = tfgnn.GraphTensor.from_pieces(
         node_sets={
@@ -82,11 +73,11 @@ def _parse_spn_json_and_build_graph(json_string: str) -> tfgnn.GraphTensor:
         },
         edge_sets={
             "edge": tfgnn.EdgeSet.from_fields(
-                sizes=[tf.shape(edge_pairs)[0]],
-                features={"weight": tf.expand_dims(edge_features, axis=-1)},
+                sizes=[num_edges],
+                features={"weight": tf.expand_dims(tf.constant(edge_weights, dtype=tf.float32), axis=-1)},
                 adjacency=tfgnn.Adjacency.from_indices(
-                    source=("node", tf.cast(edge_pairs[:, 0], dtype=tf.int32)),
-                    target=("node", tf.cast(edge_pairs[:, 1], dtype=tf.int32))
+                    source=("node", tf.constant(edges_src, dtype=tf.int32)),
+                    target=("node", tf.constant(edges_tgt, dtype=tf.int32))
                 )
             )
         }
@@ -213,35 +204,43 @@ def _parse_spn_json_and_build_heterogeneous_graph(json_string: str) -> tfgnn.Gra
     # ⚡ Bolt: Parse python string directly to avoid extremely slow tf.Tensor -> string decoding overhead inside tight loops
     data = json.loads(json_string)
 
-    petri_net = tf.constant(data["petri_net"], dtype=tf.float32)
-    num_places = tf.shape(petri_net)[0]
-    num_transitions = tf.cast(tf.shape(petri_net)[1] // 2, dtype=tf.int32)
+    petri_net = data["petri_net"]
+    num_places = len(petri_net)
+    num_transitions = len(petri_net[0]) // 2 if num_places > 0 else 0
 
-    # Node features
-    initial_marking = petri_net[:, -1]
-    firing_rates = tf.constant(data["spn_labda"], dtype=tf.float32)
+    # Extract features natively
+    initial_marking = [[row[-1]] for row in petri_net]
+    firing_rates = [[fr] for fr in data["spn_labda"]]
 
-    place_features = tf.expand_dims(initial_marking, axis=-1)
-    transition_features = tf.expand_dims(firing_rates, axis=-1)
+    place_features = tf.constant(initial_marking, dtype=tf.float32)
+    transition_features = tf.constant(firing_rates, dtype=tf.float32)
 
     # Regression labels
-    avg_tokens_per_place = tf.constant(data["spn_allmus"], dtype=tf.float32)
-    avg_firing_rates = tf.constant(data["spn_labda"], dtype=tf.float32)
-    place_labels = tf.expand_dims(avg_tokens_per_place, axis=-1)
-    transition_labels = tf.expand_dims(avg_firing_rates, axis=-1)
+    place_labels = tf.constant([[val] for val in data["spn_allmus"]], dtype=tf.float32)
+    transition_labels = tf.constant([[val] for val in data["spn_labda"]], dtype=tf.float32)
 
-    # Edges and edge features
-    pre_conditions = petri_net[:, :num_transitions]
-    post_conditions = petri_net[:, num_transitions:2*num_transitions]
+    # ⚡ Bolt: Parse edges purely in Python to avoid slow tf.where / tf.unstack inside tight map loops
+    p_in_idx = []
+    t_in_idx = []
+    weights_in = []
 
-    # ⚡ Bolt: Use indices from tf.where directly in tf.gather_nd to avoid redundant matrix transposition and restacking overhead
-    in_indices = tf.where(pre_conditions > 0)
-    p_in_idx, t_in_idx = tf.unstack(in_indices, axis=1)
-    weights_in = tf.gather_nd(pre_conditions, in_indices)
+    p_out_idx = []
+    t_out_idx = []
+    weights_out = []
 
-    out_indices = tf.where(post_conditions > 0)
-    p_out_idx, t_out_idx = tf.unstack(out_indices, axis=1)
-    weights_out = tf.gather_nd(post_conditions, out_indices)
+    for p in range(num_places):
+        for t in range(num_transitions):
+            w_in = petri_net[p][t]
+            if w_in > 0:
+                p_in_idx.append(p)
+                t_in_idx.append(t)
+                weights_in.append([w_in])
+
+            w_out = petri_net[p][t + num_transitions]
+            if w_out > 0:
+                t_out_idx.append(t)
+                p_out_idx.append(p)
+                weights_out.append([w_out])
 
     graph = tfgnn.GraphTensor.from_pieces(
         node_sets={
@@ -262,19 +261,19 @@ def _parse_spn_json_and_build_heterogeneous_graph(json_string: str) -> tfgnn.Gra
         },
         edge_sets={
             "p_to_t": tfgnn.EdgeSet.from_fields(
-                sizes=[tf.shape(p_in_idx)[0]],
-                features={"weight": tf.expand_dims(weights_in, axis=-1)},
+                sizes=[len(p_in_idx)],
+                features={"weight": tf.constant(weights_in, dtype=tf.float32)},
                 adjacency=tfgnn.Adjacency.from_indices(
-                    source=("place", tf.cast(p_in_idx, dtype=tf.int32)),
-                    target=("transition", tf.cast(t_in_idx, dtype=tf.int32))
+                    source=("place", tf.constant(p_in_idx, dtype=tf.int32)),
+                    target=("transition", tf.constant(t_in_idx, dtype=tf.int32))
                 )
             ),
             "t_to_p": tfgnn.EdgeSet.from_fields(
-                sizes=[tf.shape(p_out_idx)[0]],
-                features={"weight": tf.expand_dims(weights_out, axis=-1)},
+                sizes=[len(p_out_idx)],
+                features={"weight": tf.constant(weights_out, dtype=tf.float32)},
                 adjacency=tfgnn.Adjacency.from_indices(
-                    source=("transition", tf.cast(t_out_idx, dtype=tf.int32)),
-                    target=("place", tf.cast(p_out_idx, dtype=tf.int32))
+                    source=("transition", tf.constant(t_out_idx, dtype=tf.int32)),
+                    target=("place", tf.constant(p_out_idx, dtype=tf.int32))
                 )
             )
         }

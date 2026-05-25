@@ -9,3 +9,6 @@
 ## 2026-05-18 - Tensor Slicing Overhead in TF/Numpy interaction
 **Learning:** Slicing a TensorFlow tensor *before* calling `.numpy()` (e.g., `sizes[0].numpy()`) invokes the TensorFlow graph execution engine for the slice operation, introducing significant overhead. Conversely, calling `.numpy()` to materialize the array first and then indexing purely in Python/NumPy (e.g., `sizes.numpy()[0]`) is substantially faster (over 30x faster for single-element extractions).
 **Action:** Always extract the numpy array from a `tf.Tensor` before performing standard Python slicing or indexing when inside custom numpy feature extraction functions.
+## 2024-05-24 - [Avoid Eager TF Ops in Generators]
+**Learning:** Using eager TensorFlow operations like `tf.where`, `tf.gather_nd`, `tf.stack`, and `tf.concat` per line within a pure Python data generator (e.g., inside `tf.data.Dataset.from_generator`) introduces massive C++ dispatch overhead.
+**Action:** Always parse, filter, and calculate features using pure Python (list comprehensions, simple loops) and only convert the final, fully-formed data structure into a `tf.constant` or `np.array` before yielding.
